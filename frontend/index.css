@@ -2,100 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-    /* New Coolors Palette: https://coolors.co/86cb92-71b48d-404e7c-251f47-260f26 */
-    --primary: #251f47;       /* Dark Navy/Purple - Main Text & Primary Backgrounds */
-    --sage-primary: #71b48d;  /* Medium Green - Primary Buttons & Accents */
-    --sage-light: #86cb92;    /* Light Green - lighter accents/hover states */
-    --accent-blue: #404e7c;   /* Blue - Secondary accents/headers */
-    --dark-purple: #260f26;   /* Very Dark Purple - Deep backgrounds/Footer */
-    
-    /* Utility colors mapping to new palette */
-    --bg-main: #FAFBFA;       /* Keep light background for readability */
-    --sage-border: #E0E5E0;   /* Keep sage border for now, maybe adjust later */
-    --navy-banner: var(--primary);
-    --card-shadow: 0 4px 12px rgba(37, 31, 71, 0.08); /* Shadow tinted with primary color */
-}
+@layer base {
+    :root {
+        --background: hsl(0, 0%, 100%);
+        --foreground: hsl(0, 0%, 0%);
+        --skeleton: hsl(0, 0%, 90%);
+        --border: hsl(220, 20%, 90%);
+        --btn-border: hsl(214deg, 31.8%, 91.4%);
+        --input: hsl(220, 20%, 90%);
 
-body {
-    margin: 0;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background-color: var(--bg-main);
-    color: var(--primary);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
+        --radius: 0.5rem;
 
-@keyframes fade-in-up {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
+        /* SereneStudy Color Palette */
+        --sage-primary: #7FB685;
+        --sage-light: #A8D5BA;
+        --sage-border: #E8EDE8;
+        --primary: #2D3E35;
+        --bg-main: #F8FAF9;
     }
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
+    .dark {
+        --background: hsl(222, 94%, 5%);
+        --foreground: hsl(0, 0%, 100%);
+        --skeleton: hsl(218, 36%, 16%);
+        --border: hsl(220, 20%, 90%);
+        --btn-border: hsl(217deg, 32.6%, 17.5%);
+        --input: hsl(219, 63%, 16%);
+
+        --radius: 0.5rem;
+    }
+
+    body {
+        @apply bg-background text-foreground;
     }
 }
 
-.animate-fade-in {
-    animation: fade-in-up 0.4s ease-out forwards;
-}
-
-.glass-card {
-    background: white;
-    border: 1px solid var(--sage-border);
-    box-shadow: var(--card-shadow);
-    border-radius: 16px;
-    /* More professional rounding */
-}
-
-.planner-card {
-    @apply transition-all duration-200 border border-slate-100 rounded-xl p-4 bg-white text-center cursor-pointer;
-    min-width: 90px;
-}
-
-.planner-card.active {
-    background-color: var(--sage-primary);
-    color: white;
-    border-color: var(--sage-primary);
-    box-shadow: 0 8px 20px rgba(127, 145, 127, 0.25);
-}
-
-.study-card {
-    @apply transition-all duration-200 border border-slate-100 bg-white rounded-2xl p-6 mb-4 flex gap-6 items-start;
-    box-shadow: var(--card-shadow);
-}
-
-.study-card:hover {
-    @apply border-sage-primary/30 shadow-md;
-}
-
-.navy-banner {
-    background-color: var(--navy-banner);
-    @apply rounded-2xl p-8 text-white relative overflow-hidden;
-}
-
-.button-sage {
-    background-color: var(--sage-primary);
-    @apply text-white px-6 py-2.5 rounded-lg font-medium transition-all hover:opacity-90 active:scale-95;
-}
-
-.button-outline {
-    @apply border border-slate-200 text-slate-600 px-6 py-2.5 rounded-lg font-medium transition-all hover:bg-slate-50 active:scale-95 flex items-center gap-2;
-}
-
-.badge-reason {
-    background-color: var(--sage-light);
-    color: var(--sage-primary);
-    @apply px-3 py-1.5 rounded-full text-[11px] font-semibold flex items-center gap-2 border border-var(--sage-border);
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-    display: none;
-}
-
-.scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+@layer components {
+    .g-button {
+        @apply rounded-[var(--radius)] border;
+        border-color: var(--btn-border)
+    }
 }

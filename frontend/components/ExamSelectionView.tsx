@@ -1,5 +1,6 @@
 import React from 'react';
 import { OnboardingData, StudyTask } from '../types';
+import { GlowCard } from './ui/spotlight-card';
 
 interface ExamSelectionViewProps {
     plans: OnboardingData[];
@@ -48,13 +49,15 @@ const ExamSelectionView: React.FC<ExamSelectionViewProps> = ({ plans, tasks, onS
                     const statusColor = isCompleted ? 'bg-[var(--sage-light)] text-[var(--primary)]' : isStarted ? 'bg-[#FDFBEB] text-[#B89B2E]' : 'bg-slate-50 text-slate-400';
 
                     return (
-                        <button
+                        <GlowCard
                             key={idx}
                             onClick={() => onSelectPlan(plan)}
-                            className="group text-left p-10 bg-white border border-[var(--sage-border)] rounded-[40px] hover:border-[var(--sage-primary)] hover:shadow-2xl transition-all duration-500 flex flex-col h-full active:scale-[0.98]"
+                            customSize={true}
+                            glowColor="purple"
+                            className="group text-left p-10 cursor-pointer hover:shadow-2xl transition-all duration-500 flex flex-col h-full active:scale-[0.98] w-full"
                             style={{ animationDelay: `${idx * 100}ms` }}
                         >
-                            <div className="flex-1 w-full">
+                            <div className="flex-1 w-full relative z-10">
                                 <div className="flex justify-between items-center mb-5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
                                         {subtitle}
@@ -89,7 +92,7 @@ const ExamSelectionView: React.FC<ExamSelectionViewProps> = ({ plans, tasks, onS
                                 )}
                             </div>
 
-                            <div className="mt-10 pt-8 border-t border-slate-50 flex items-center justify-between w-full">
+                            <div className="mt-10 pt-8 border-t border-slate-50 flex items-center justify-between w-full relative z-10">
                                 <span className="text-base font-bold text-[var(--sage-primary)] group-hover:translate-x-1 transition-transform flex items-center gap-2">
                                     {isStarted ? 'Resume Study' : 'Start Preparation'}
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +100,7 @@ const ExamSelectionView: React.FC<ExamSelectionViewProps> = ({ plans, tasks, onS
                                     </svg>
                                 </span>
                             </div>
-                        </button>
+                        </GlowCard>
                     );
                 })}
 

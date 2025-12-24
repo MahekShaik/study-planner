@@ -8,14 +8,15 @@ interface OnboardingViewProps {
   onLogout: () => void;
   initialData?: OnboardingData | null;
   onExamModeRequest: () => void;
+  userDailyHours?: number;
 }
 
-const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, initialData, onExamModeRequest }) => {
+const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, initialData, onExamModeRequest, userDailyHours = 4 }) => {
   const [step, setStep] = useState<'mode' | 'details' | 'learning-style'>('mode');
   const [data, setData] = useState<OnboardingData>(initialData || {
     mode: 'exam',
     planType: 'balanced',
-    hoursPerDay: 4
+    hoursPerDay: userDailyHours
   } as OnboardingData);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -169,28 +170,14 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Deadline</label>
-                  <input
-                    required
-                    type="date"
-                    className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
-                    onChange={(e) => setData({ ...data, examDate: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Daily Cap</label>
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    max="12"
-                    className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
-                    placeholder="4 hrs"
-                    onChange={(e) => setData({ ...data, hoursPerDay: parseInt(e.target.value) })}
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Deadline</label>
+                <input
+                  required
+                  type="date"
+                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
+                  onChange={(e) => setData({ ...data, examDate: e.target.value })}
+                />
               </div>
 
               <PlanTypeSelector />
@@ -226,28 +213,14 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Duration</label>
-                  <input
-                    required
-                    className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
-                    placeholder="e.g. 8 weeks"
-                    onChange={(e) => setData({ ...data, skillDuration: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Daily Cap</label>
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    max="12"
-                    className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
-                    placeholder="2 hrs"
-                    onChange={(e) => setData({ ...data, hoursPerDay: parseInt(e.target.value) })}
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Duration</label>
+                <input
+                  required
+                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
+                  placeholder="e.g. 8 weeks"
+                  onChange={(e) => setData({ ...data, skillDuration: e.target.value })}
+                />
               </div>
 
               <PlanTypeSelector />

@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [activeTask, setActiveTask] = useState<StudyTask | null>(null);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ email: string; name: string; dailyHours: number } | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Sync session on mount
@@ -41,6 +42,16 @@ const App: React.FC = () => {
 
   async function hydrateSession(authToken: string) {
     try {
+      // Fetch user profile first
+      const profileResponse = await fetch('/api/user/profile', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+
+      if (profileResponse.ok) {
+        const profile = await profileResponse.json();
+        setUserProfile(profile);
+      }
+
       // Fetch Active Study Plan (includes both plan details and tasks)
       const response = await fetch('/api/study-plan/active', {
         headers: { 'Authorization': `Bearer ${authToken} ` }
@@ -222,7 +233,7 @@ const App: React.FC = () => {
 
     switch (currentScreen) {
       case 'onboarding':
-        return <OnboardingView onComplete={handleOnboardingComplete} onLogout={handleExitSession} initialData={selectedPlan} onExamModeRequest={handleExamModeRequest} />;
+        return <OnboardingView onComplete={handleOnboardingComplete} onLogout={handleExitSession} initialData={selectedPlan} onExamModeRequest={handleExamModeRequest} userDailyHours={userProfile?.dailyHours || 4} />;
       case 'exam-selection':
         return <ExamSelectionView plans={allPlans} tasks={tasks} onSelectPlan={handleSelectPlan} onNewExam={handleStartNewExam} />;
       case 'dashboard':
@@ -287,7 +298,7 @@ const App: React.FC = () => {
       case 'user-profile':
         return <UserProfile tasks={tasks} onboardingData={selectedPlan} onBack={() => setCurrentScreen('dashboard')} onLogout={handleExitSession} onStartNewPlan={handleStartNewExam} />;
       case 'auth':
-        return <OnboardingView onComplete={handleOnboardingComplete} onLogout={handleExitSession} initialData={selectedPlan} onExamModeRequest={handleExamModeRequest} />;
+        return <OnboardingView onComplete={handleOnboardingComplete} onLogout={handleExitSession} initialData={selectedPlan} onExamModeRequest={handleExamModeRequest} userDailyHours={userProfile?.dailyHours || 4} />;
       default:
         return (
           <StudyDashboard
@@ -387,7 +398,7 @@ const App: React.FC = () => {
       )}
 
       <main className={`flex-1 flex flex-col items-center justify-center ${!isUtilityScreen ? 'mt-32' : ''} animate-fade-in w-full`}>
-        <div className={`w-full ${currentScreen === 'landing' ? '' : 'max-w-4xl'}`}>
+        <div className={`w-full ${['landing', 'auth'].includes(currentScreen) ? '' : 'max-w-4xl'}`}>
           {renderScreen()}
         </div>
       </main>

@@ -46,11 +46,11 @@ const verifyToken = (req) => {
 // POST /api/auth/signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, dailyHours } = req.body;
     const existingUser = await getUserByEmail(email);
     if (existingUser) return res.status(400).json({ message: 'User already exists' });
     const hashedPassword = await bcrypt.hash(password, 10);
-    await createUser(email, name, hashedPassword);
+    await createUser(email, name, hashedPassword, dailyHours || 4);
     console.log('User signed up:', email);
     res.json({ message: 'Signup successful' });
   } catch (error) {
@@ -73,6 +73,27 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Login failed' });
+  }
+});
+
+// GET /api/user/profile - Fetch user profile
+app.get('/api/user/profile', async (req, res) => {
+  const decoded = verifyToken(req);
+  if (!decoded) return res.status(401).json({ message: 'Unauthorized' });
+
+  try {
+    const user = await getUserByEmail(decoded.email);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Return user profile without sensitive data
+    res.json({
+      email: user.email,
+      name: user.name,
+      dailyHours: user.dailyHours || 4
+    });
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ message: 'Failed to fetch profile' });
   }
 });
 

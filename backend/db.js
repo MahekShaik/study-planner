@@ -72,12 +72,13 @@ async function initializeDatabase() {
 }
 
 // User operations
-async function createUser(email, name, hashedPassword) {
+async function createUser(email, name, hashedPassword, dailyHours = 4) {
     const user = {
         id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         email,
         name,
         hashedPassword,
+        dailyHours,
         createdAt: new Date().toISOString()
     };
 
