@@ -277,6 +277,7 @@ cd frontend
 npm run build
 # Creates optimized build in dist/
 
+
 # Backend for production
 cd ../backend
 NODE_ENV=production node server.js
