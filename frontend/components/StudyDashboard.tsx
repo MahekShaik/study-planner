@@ -7,9 +7,10 @@ interface StudyDashboardProps {
   onStartTask: (task: StudyTask) => void;
   onMarkCompleted: (task: StudyTask) => void;
   onStartNewPlan?: () => void;
+  onViewResources: (task: StudyTask) => void;
 }
 
-const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, onStartTask, onMarkCompleted, onStartNewPlan }) => {
+const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, onStartTask, onMarkCompleted, onStartNewPlan, onViewResources }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
@@ -132,8 +133,16 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, 
                   ) : (
                     <>
                       <button
+                        onClick={() => onViewResources(task)}
+                        className="border border-white/20 hover:bg-white/10 text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-2 h-10 mr-2"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                        Study
+                      </button>
+
+                      <button
                         onClick={() => onMarkCompleted(task)}
-                        className="bg-white hover:bg-slate-100 text-[#162032] px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center h-10"
+                        className="border border-white/20 hover:bg-white/10 text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center h-10 mr-2"
                       >
                         Mark Complete
                       </button>

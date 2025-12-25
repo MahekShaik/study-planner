@@ -225,9 +225,23 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
 
   try {
     console.log(`Calling Gemini API (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`);
+
+    let parts = [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }];
+
+    if (data.documentData && data.mimeType) {
+      console.log("Attaching document context to prompt...");
+      parts[0].text += "\n\n[IMPORTANT] A document has been uploaded. Use the attached document to extract the syllabus, topics, and structure the plan precisely based on its content.";
+      parts.push({
+        inlineData: {
+          mimeType: data.mimeType,
+          data: data.documentData
+        }
+      });
+    }
+
     const result = await genAI.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }] }],
+      contents: [{ role: "user", parts: parts }],
       config: {
         responseMimeType: "application/json",
       }
@@ -351,7 +365,10 @@ app.post('/api/study-plan/generate', async (req, res) => {
     const savedTasks = await saveTasks(decoded.email, generatedTasks);
 
     // 4. Only save onboarding data after tasks are successfully saved
-    await createOnboarding(decoded.email, onboardingData.mode, onboardingData);
+    // 4. Only save onboarding data after tasks are successfully saved
+    // Strip heavy document data before saving
+    const { documentData, mimeType, ...savedOnboarding } = onboardingData;
+    await createOnboarding(decoded.email, onboardingData.mode, savedOnboarding);
 
     console.log(`Successfully generated and saved study plan for ${decoded.email}: ${savedTasks.length} tasks`);
     res.json({ plan: onboardingData, tasks: savedTasks });
@@ -454,7 +471,21 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
 - Calm, tutor-like tone. No emojis.
 - Match difficulty to exam standards.
 - Include 3 MCQ and 1 short-answer diagnostic question.
-- No answers should be shown immediately to the user.`;
+- No answers should be shown immediately to the user.
+- STRICTLY return a JSON array of objects with this structure:
+  [
+    {
+      "id": "1",
+      "type": "mcq",
+      "question": "Question text here",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option B"
+    },
+    ...
+  ]
+- Ensure "question" field contains the question text.
+- For short answer, "options" can be empty or omitted.
+`;
 
     const result = await genAI.models.generateContent({
       model: "gemini-2.5-flash",
@@ -516,7 +547,15 @@ RULES:
 2. Identify Stable Subtopics: Where student was consistently correct.
 3. Supportive Feedback: No negative language. Treat mistakes as learning signals.
 4. Targeted Revision: Suggest short, specific revision tasks ONLY for weak subtopics for ${tomorrowISO}.
-5. Return JSON object.
+5. Return JSON object with this EXACT structure:
+{
+  "score": number, // Number of correct answers
+  "total": number, // Total number of questions
+  "insight": "string", // Encouraging feedback summary
+  "weakSubtopics": ["string"],
+  "stableSubtopics": ["string"],
+  "suggestedRevisionTasks": [] // Optional array of tasks
+}
 
 TONE: supportive, calm, exam-focused. No emojis. No AI mentions.`;
 

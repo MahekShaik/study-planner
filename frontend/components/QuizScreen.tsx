@@ -103,6 +103,22 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ task, onFinish, examDate }) => 
     );
   }
 
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in bg-[#FBFCFB] px-6 text-center">
+        <div className="text-4xl mb-4">⚠️</div>
+        <p className="text-slate-500 font-medium">Unable to load quiz questions.</p>
+        <p className="text-slate-400 text-sm mt-2 mb-6">Please try again or contact support.</p>
+        <button
+          onClick={() => onFinish({ score: 0, total: 0, insight: "Quiz skipped due to error.", weakSubtopics: [], stableSubtopics: [] })}
+          className="text-indigo-600 font-bold hover:underline"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
   const currentQ = questions[currentIndex];
 
   return (

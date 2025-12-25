@@ -41,6 +41,24 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
     onComplete(finalData);
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const base64String = ev.target?.result as string;
+        // base64String looks like "data:application/pdf;base64,....."
+        if (base64String) {
+          const mimeType = base64String.split(';')[0].split(':')[1];
+          const base64Data = base64String.split(',')[1];
+          setData({ ...data, documentData: base64Data, mimeType: mimeType });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+
   if (isSubmitting) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-[var(--bg-main)]">
@@ -169,6 +187,31 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                   onChange={(e) => setData({ ...data, syllabus: e.target.value })}
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Upload Syllabus/Materials (Optional)</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept=".pdf,.txt,.md"
+                    onChange={handleFileUpload}
+                    className="block w-full text-sm text-slate-500
+                        file:mr-4 file:py-2.5 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-xs file:font-semibold
+                        file:bg-[var(--sage-light)] file:text-[var(--primary)]
+                        hover:file:bg-[var(--sage-light)]/80 cursor-pointer"
+                  />
+                  {data.documentData && (
+                    <span className="text-emerald-500 text-xs font-bold flex items-center gap-1 animate-fade-in">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                      Ready
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 ml-1">Accepted: PDF, Text. AI will use this to structure your plan.</p>
+              </div>
+
 
               <div>
                 <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Deadline</label>
