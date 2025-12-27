@@ -178,19 +178,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({ tasks, examDate, onStartTas
                     <span className="text-xs">Topic Mastered</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => onStartTask(task)}
-                      className="bg-slate-900 hover:bg-slate-800 text-white py-3 px-4 rounded-xl font-medium text-xs transition-all"
-                    >
-                      {task.status === 'in_progress' ? 'Continue' : 'Study'}
-                    </button>
-                    <button
-                      onClick={() => onMarkCompleted(task)}
-                      className="bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100 py-3 px-4 rounded-xl font-medium text-xs transition-all"
-                    >
-                      Mark Done
-                    </button>
+                  <div className="flex items-center gap-2 mt-4">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
+                      Scheduled
+                    </span>
                   </div>
                 )}
               </div>

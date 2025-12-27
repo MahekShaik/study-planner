@@ -43,57 +43,22 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles) return;
-
-    const currentFiles = data.syllabusFiles || [];
-    if (currentFiles.length + selectedFiles.length > 10) {
-      alert("You can upload a maximum of 10 files.");
-      return;
-    }
-
-    setIsUploading(true);
-    const newFiles: { name: string, data: string, type: string }[] = [...currentFiles];
-    let processedCount = 0;
-
-    Array.from(selectedFiles).forEach((file: File) => {
+    const file = e.target.files?.[0];
+    if (file) {
       const reader = new FileReader();
-      reader.onload = (event: ProgressEvent<FileReader>) => {
-        const base64Content = event.target?.result as string;
-        if (!base64Content) {
-          processedCount++;
-          if (processedCount === selectedFiles.length) setIsUploading(false);
-          return;
+      reader.onload = (ev) => {
+        const base64String = ev.target?.result as string;
+        // base64String looks like "data:application/pdf;base64,....."
+        if (base64String) {
+          const mimeType = base64String.split(';')[0].split(':')[1];
+          const base64Data = base64String.split(',')[1];
+          setData({ ...data, documentData: base64Data, mimeType: mimeType });
         }
-
-        // Extract pure base64 if it's a data URL
-        const base64Data = base64Content.includes('base64,') ? base64Content.split('base64,')[1] : base64Content;
-
-        newFiles.push({
-          name: file.name,
-          data: base64Data,
-          type: file.type || 'application/octet-stream'
-        });
-
-        processedCount++;
-        if (processedCount === selectedFiles.length) {
-          setData(prev => ({ ...prev, syllabusFiles: newFiles }));
-          setIsUploading(false);
-        }
-      };
-      reader.onerror = () => {
-        processedCount++;
-        if (processedCount === selectedFiles.length) setIsUploading(false);
       };
       reader.readAsDataURL(file);
-    });
+    }
   };
 
-  const removeFile = (index: number) => {
-    const currentFiles = data.syllabusFiles || [];
-    const newFiles = currentFiles.filter((_, i) => i !== index);
-    setData({ ...data, syllabusFiles: newFiles });
-  };
 
   if (isSubmitting) {
     return (
@@ -223,6 +188,31 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                   onChange={(e) => setData({ ...data, syllabus: e.target.value })}
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Upload Syllabus/Materials (Optional)</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept=".pdf,.txt,.md"
+                    onChange={handleFileUpload}
+                    className="block w-full text-sm text-slate-500
+                        file:mr-4 file:py-2.5 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-xs file:font-semibold
+                        file:bg-[var(--sage-light)] file:text-[var(--primary)]
+                        hover:file:bg-[var(--sage-light)]/80 cursor-pointer"
+                  />
+                  {data.documentData && (
+                    <span className="text-emerald-500 text-xs font-bold flex items-center gap-1 animate-fade-in">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                      Ready
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 ml-1">Accepted: PDF, Text. AI will use this to structure your plan.</p>
+              </div>
+
 
               <div>
                 <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Deadline</label>

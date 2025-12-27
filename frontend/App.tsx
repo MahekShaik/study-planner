@@ -150,8 +150,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleMarkCompleted = async (task: StudyTask) => {
-    await handleUpdateProgress(task.id, { status: 'completed', quizStatus: 'completed' });
+  const handleMarkCompleted = (task: StudyTask) => {
+    setActiveTask(task);
+    setCurrentScreen('quiz');
   };
 
   const handleSelectPlan = (plan: OnboardingData) => {
@@ -273,6 +274,7 @@ const App: React.FC = () => {
             onStartTask={handleStartTask}
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
+            onViewResources={handleViewResources}
           />
         );
       case 'insights':
@@ -307,6 +309,7 @@ const App: React.FC = () => {
             onStartTask={handleStartTask}
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
+            onViewResources={handleViewResources}
           />
         );
     }
