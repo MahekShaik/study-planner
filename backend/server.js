@@ -228,15 +228,19 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
 
     let parts = [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }];
 
-    if (data.documentData && data.mimeType) {
-      console.log("Attaching document context to prompt...");
-      parts[0].text += "\n\n[IMPORTANT] A document has been uploaded. Use the attached document to extract the syllabus, topics, and structure the plan precisely based on its content.";
-      parts.push({
-        inlineData: {
-          mimeType: data.mimeType,
-          data: data.documentData
+    if (data.syllabusFiles && Array.isArray(data.syllabusFiles)) {
+      console.log(`Attaching ${data.syllabusFiles.length} syllabus files to prompt...`);
+      data.syllabusFiles.forEach(file => {
+        if (file.data && file.type) {
+          parts.push({
+            inlineData: {
+              data: file.data,
+              mimeType: file.type
+            }
+          });
         }
       });
+      parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives to structure the study plan accurately." });
     }
 
     const result = await genAI.models.generateContent({

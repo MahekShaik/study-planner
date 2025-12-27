@@ -32,9 +32,10 @@ const memoryStore = {
 // Initialize database and containers
 async function initializeDatabase() {
     try {
-        // Create database if it doesn't exist
+        // Create database if it doesn't exist with shared throughput
         const { database: db } = await client.databases.createIfNotExists({
-            id: databaseName
+            id: databaseName,
+            throughput: 400 // Set shared throughput for the entire database
         });
         database = db;
         console.log(`Database '${databaseName}' ready`);

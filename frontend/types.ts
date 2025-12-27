@@ -11,8 +11,7 @@ export interface OnboardingData {
   learningStyle?: 'Flashcards' | 'Analogies' | 'Practice' | 'Mixed';
   skill?: string;
   skillDuration?: string;
-  documentData?: string; // Base64 encoded file content
-  mimeType?: string;
+  syllabusFiles?: { name: string, data: string, type: string }[];
 }
 
 export interface StudyTask {
