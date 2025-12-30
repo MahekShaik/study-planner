@@ -18,7 +18,8 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize database on startup
 let dbReady = false;
@@ -181,6 +182,7 @@ const { GoogleGenAI } = require('@google/genai');
 const genAIKey = process.env.GEMINI_API_KEY || process.env.API_KEY || 'MISSING_KEY';
 console.log("Configured API Key:", genAIKey === 'MISSING_KEY' ? 'MISSING' : (genAIKey.substring(0, 4) + '...'));
 const genAI = new GoogleGenAI({ apiKey: genAIKey });
+// Direct Gemini integration for syllabus extraction - Make.com integration has been removed.
 
 async function generatePlanFromOnboarding(data, retryCount = 0) {
   const MAX_RETRIES = 2;
@@ -228,8 +230,8 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
 
     let parts = [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }];
 
-    if (data.syllabusFiles && Array.isArray(data.syllabusFiles)) {
-      console.log(`Attaching ${data.syllabusFiles.length} syllabus files to prompt...`);
+    if (data.syllabusFiles && Array.isArray(data.syllabusFiles) && data.syllabusFiles.length > 0) {
+      console.log(`Attaching ${data.syllabusFiles.length} syllabus files directly to Gemini for extraction and planning...`);
       data.syllabusFiles.forEach(file => {
         if (file.data && file.type) {
           parts.push({
@@ -240,7 +242,7 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
           });
         }
       });
-      parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives to structure the study plan accurately." });
+      parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives. Then, structure the study plan accurately based on this extracted material." });
     }
 
     const result = await genAI.models.generateContent({
