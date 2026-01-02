@@ -116,7 +116,7 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, 
                     <span className={`text-xs text-white font-medium ${expandedTaskId === task.id ? '' : 'line-clamp-1'}`}>
                       {task.aiExplanation}
                     </span>
-                    {expandedTaskId !== task.id && task.aiExplanation.length > 100 && (
+                    {expandedTaskId !== task.id && (task.aiExplanation?.length || 0) > 100 && (
                       <span className="text-[10px] text-white/70 mt-1 font-bold">Click to read more</span>
                     )}
                   </div>

@@ -476,8 +476,9 @@ app.post('/api/quiz/generate', async (req, res) => {
 Generate a conceptual and application-based quiz based ONLY on the topic "${topic}" in "${subject}".
 - Calm, tutor-like tone. No emojis.
 - Match difficulty to exam standards.
-- Include 3 MCQ and 1 short-answer diagnostic question.
+- Include 5 MCQ and 1 short-answer diagnostic question.
 - No answers should be shown immediately to the user.
+- MANDATORY: Every question MUST have an "explanation" field (minimum 2 sentences) explaining the concept and why the correctAnswer is right.
 - STRICTLY return a JSON array of objects with this structure:
   [
     {
@@ -485,7 +486,8 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
       "type": "mcq",
       "question": "Question text here",
       "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "Option B"
+      "correctAnswer": "Option B",
+      "explanation": "Briefly explain why this answer is correct."
     },
     ...
   ]
@@ -548,22 +550,24 @@ Questions: ${JSON.stringify(questions)}
 Responses: ${JSON.stringify(responses)}
 Proximity: ${proximity}
 
+MANDATORY: Calculate score honestly
 RULES:
-1. Identify Weak Subtopics: Where answers were incorrect or showed gaps.
-2. Identify Stable Subtopics: Where student was consistently correct.
-3. Supportive Feedback: No negative language. Treat mistakes as learning signals.
-4. Targeted Revision: Suggest short, specific revision tasks ONLY for weak subtopics for ${tomorrowISO}.
-5. Return JSON object with this EXACT structure:
+1. Calculate Score Honestly: The "score" field must be the EXACT number of correct answers based on the student's Responses. DO NOT inflate the score.
+2. Identify Weak Subtopics: Where answers were incorrect or showed gaps.
+3. Identify Stable Subtopics: Where student was consistently correct.
+4. Supportive Feedback: While being honest about the score, keep the language supportive and use mistakes as learning signals.
+5. Targeted Revision: Suggest short, specific revision tasks ONLY for weak subtopics for ${tomorrowISO}.
+6. Return JSON object with this EXACT structure:
 {
-  "score": number, // Number of correct answers
+  "score": number, // MUST match the actual number of correct answers
   "total": number, // Total number of questions
-  "insight": "string", // Encouraging feedback summary
+  "insight": "string", // Encouraging feedback summary appropriate for the score
   "weakSubtopics": ["string"],
   "stableSubtopics": ["string"],
   "suggestedRevisionTasks": [] // Optional array of tasks
 }
 
-TONE: supportive, calm, exam-focused. No emojis. No AI mentions.`;
+TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
 
     const result = await genAI.models.generateContent({
       model: "gemini-2.5-flash",
