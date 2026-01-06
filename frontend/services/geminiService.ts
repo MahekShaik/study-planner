@@ -43,10 +43,10 @@ export const evaluateQuizPerformance = async (
   });
 };
 
-export const getAIResources = async (topic: string, subject: string): Promise<StudyResource[]> => {
+export const getAIResources = async (topic: string, subject: string, subtopic?: string): Promise<StudyResource[]> => {
   const data = await apiFetch('/api/resources', {
     method: 'POST',
-    body: JSON.stringify({ topic, subject })
+    body: JSON.stringify({ topic, subject, subtopic })
   });
   return data.resources;
 };

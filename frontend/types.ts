@@ -64,6 +64,9 @@ export interface StudyResource {
   url: string;
   type: 'video' | 'article' | 'website';
   description: string;
+  thumbnail?: string;
+  duration?: string;
+  views?: string;
 }
 
 export interface UserProfile {

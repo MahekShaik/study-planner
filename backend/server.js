@@ -767,41 +767,42 @@ app.post('/api/resources', async (req, res) => {
   try {
     const { topic, subject } = req.body;
 
-    // User requested "Purely YouTube, no articles"
-    // Since we don't have a YouTube Data API key, we construct "Deep Search" links.
-    // These link directly to the high-intent search results page on YouTube.
+    // User requested "Proper YT videos"
+    // topic is now being passed as subtopic from the frontend for better precision
+    const searchQuery = `${topic} ${subject} tutorial`;
+    console.log(`Searching YouTube for: ${searchQuery}`);
 
-    const encodedTopic = encodeURIComponent(`${topic} ${subject}`);
-    const encodedTopicSimple = encodeURIComponent(topic);
+    try {
+      const yts = require('yt-search');
+      const searchResults = await yts(searchQuery);
 
-    const resources = [
-      {
-        title: `Watch: ${topic} Tutorials`,
-        url: `https://www.youtube.com/results?search_query=${encodedTopic}+tutorial`,
-        type: 'Video Series',
-        description: `Explore comprehensive video tutorials for ${topic} on YouTube.`,
-      },
-      {
-        title: `${topic}: Explained Simply`,
-        url: `https://www.youtube.com/results?search_query=${encodedTopic}+explained+simply`,
-        type: 'Concept Video',
-        description: 'Find short, clear explanations and conceptual breakdowns.',
-      },
-      {
-        title: `${topic}: Examples & Practice`,
-        url: `https://www.youtube.com/results?search_query=${encodedTopic}+examples+practice`,
-        type: 'Practical Video',
-        description: 'Watch solved examples and practical applications.',
-      },
-      {
-        title: `Deep Dive: ${topic} (Long form)`,
-        url: `https://www.youtube.com/results?search_query=${encodedTopic}+university+lecture`,
-        type: 'Lecture',
-        description: 'In-depth university-style lectures and detailed walkthroughs.',
-      }
-    ];
+      const resources = searchResults.videos.slice(0, 6).map(video => ({
+        title: video.title,
+        url: video.url, // Direct Watch URL: https://youtube.com/watch?v=...
+        type: 'video',
+        description: video.description || `Watch ${video.title} on YouTube.`,
+        thumbnail: video.thumbnail,
+        duration: video.timestamp,
+        views: `${video.views} views`
+      }));
 
-    res.json({ resources });
+      console.log(`Found ${resources.length} videos`);
+      res.json({ resources });
+    } catch (searchError) {
+      console.error('YouTube Search Error:', searchError);
+      // Fallback only if library fails completely
+      const encodedTopic = encodeURIComponent(`${topic} ${subject}`);
+      res.json({
+        resources: [
+          {
+            title: `YouTube Search: ${topic}`,
+            url: `https://www.youtube.com/results?search_query=${encodedTopic}+tutorial`,
+            type: 'video',
+            description: `Search results for ${topic} on YouTube.`,
+          }
+        ]
+      });
+    }
   } catch (error) {
     console.error('Resources error:', error);
     res.json({ resources: [] });
