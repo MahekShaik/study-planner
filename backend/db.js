@@ -261,13 +261,41 @@ async function updateUser(email, updates) {
     return null;
 }
 
-async function deletePendingTasks(userEmail) {
+// Update onboarding data (e.g., for lastReplanned timestamp)
+async function updateOnboarding(onboardingId, userEmail, updates) {
+    if (onboardingContainer) {
+        try {
+            const item = await onboardingContainer.item(onboardingId, userEmail).read();
+            if (item.resource) {
+                const updatedItem = { ...item.resource, ...updates };
+                const { resource } = await onboardingContainer.item(onboardingId, userEmail).replace(updatedItem);
+                return resource;
+            }
+        } catch (error) {
+            console.error('Failed to update onboarding in Cosmos DB, checking memory:', error.message);
+        }
+    }
+
+    const index = memoryStore.onboarding.findIndex(o => o.id === onboardingId && o.userEmail === userEmail);
+    if (index !== -1) {
+        memoryStore.onboarding[index] = { ...memoryStore.onboarding[index], ...updates };
+        return memoryStore.onboarding[index];
+    }
+    return null;
+}
+
+async function deletePendingTasks(userEmail, subject = null) {
     if (tasksContainer) {
         try {
-            const querySpec = {
-                query: 'SELECT * FROM c WHERE c.userEmail = @userEmail AND c.status = "pending"',
-                parameters: [{ name: '@userEmail', value: userEmail }]
-            };
+            let query = 'SELECT * FROM c WHERE c.userEmail = @userEmail AND c.status = "pending"';
+            const parameters = [{ name: '@userEmail', value: userEmail }];
+
+            if (subject) {
+                query += ' AND c.subject = @subject';
+                parameters.push({ name: '@subject', value: subject });
+            }
+
+            const querySpec = { query, parameters };
             const { resources } = await tasksContainer.items.query(querySpec).fetchAll();
             for (const task of resources) {
                 await tasksContainer.item(task.id, userEmail).delete();
@@ -278,7 +306,12 @@ async function deletePendingTasks(userEmail) {
         }
     }
 
-    memoryStore.tasks = memoryStore.tasks.filter(t => !(t.userEmail === userEmail && t.status === 'pending'));
+    memoryStore.tasks = memoryStore.tasks.filter(t => {
+        const matchUser = t.userEmail === userEmail && t.status === 'pending';
+        if (!matchUser) return true; // Keep task
+        if (subject && t.subject !== subject) return true; // Keep task if subject doesn't match
+        return false; // Delete task
+    });
     return true;
 }
 
@@ -289,6 +322,7 @@ module.exports = {
     updateUser,
     createOnboarding,
     getOnboarding,
+    updateOnboarding,
     saveTasks,
     getTasks,
     updateTaskProgress,

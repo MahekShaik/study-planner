@@ -13,86 +13,113 @@ class PlanningEngine {
     /**
      * Re-plans all future/missed tasks using Gemini's intelligence.
      * Considers: Today's date, Exam date, Current mood, Performance status, and Daily hours.
+     * Strict Rules: Runs only once per day per plan to maintain stability.
      */
     static async ensureOptimalPlan(userEmail, currentMood = 'okay') {
+        const { getOnboarding, updateOnboarding, deletePendingTasks, saveTasks, getUserByEmail, getTasks } = require('./db');
         try {
-            const allTasks = await getTasks(userEmail);
             const todayStr = new Date().toISOString().split('T')[0];
-
-            // 1. Check if we actually need a replan (missed tasks or mood changed)
-            const missedTasks = allTasks.filter(t => t.status === 'pending' && t.date < todayStr);
-            const pendingTasks = allTasks.filter(t => t.status === 'pending' && t.date >= todayStr);
-            const completedTasks = allTasks.filter(t => t.status === 'completed');
-
-            // If no missed tasks and no pending tasks, nothing to replan
-            if (missedTasks.length === 0 && pendingTasks.length === 0) return { redistributed: false };
-
-            console.log(`[PlanningEngine] AI Replanning triggered for ${userEmail}. Mood: ${currentMood}`);
-
-            // 2. Get User & Plan Context
             const user = await getUserByEmail(userEmail);
-            const onboardingEntries = await getOnboarding(userEmail);
+            const onboardingEntries = await getOnboarding(userEmail); // Get ALL plans
+
             if (!onboardingEntries || onboardingEntries.length === 0) return { redistributed: false };
 
-            const plan = onboardingEntries[0].onboardingData;
-            const examDate = plan.examDate;
-            const dailyHours = user.dailyHours || 4;
+            const allTasks = await getTasks(userEmail);
+            let totalReplanned = 0;
 
-            // 3. Prepare AI Prompt
-            const moodMap = {
-                'fresh': 'Focus on intense Core Learning and new complex topics. Energy is high.',
-                'calm': 'Steady progress. Balanced mix of learning and moderate practice.',
-                'okay': 'Neutral balance. Follow standard curriculum sequence.',
-                'tired': 'Shift to Reinforcement Revision and light practice. Avoid heavy new theory.',
-                'stressed': 'Focus on Comfort Revision and very easy tasks to build confidence.'
-            };
+            console.log(`[PlanningEngine] Checking optimal plan for ${userEmail}. Mood: ${currentMood}`);
 
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-            const prompt = `You are an agentic study planner. Your goal is to REPLAN a student's schedule.
-            
-            CONTEXT:
-            - Today's Date: ${todayStr}
-            - Exam Date: ${examDate}
-            - User's Daily Target: ${dailyHours} hours/day
-            - User's Current Mood: ${currentMood.toUpperCase()} (${moodMap[currentMood] || 'Neutral'})
-            
-            STATUS:
-            - Completed Topics: ${completedTasks.map(t => t.subtopic).join(', ')}
-            - Unfinished/Missed Topics: ${[...missedTasks, ...pendingTasks].map(t => t.subtopic).join(', ')}
-            
-            RULES:
-            1. RE-DISTRIBUTE all unfinished topics starting from ${todayStr}.
-            2. MOOD RULE: strictly follow the mood strategy for TODAY (${todayStr}).
-            3. CRUNCH MODE: If today is within 3 days of the Exam (${examDate}), IGNORE mood and daily hours. MAXIMIZE coverage to ensure every topic is touched.
-            4. DROPPING: If it's mathematically impossible to finish, drop "Practice" or "Optional Revision" before dropping "Core Learning".
-            5. WEAK AREAS: If a topic is marked as "Weak Area Focus", ensure it has at least 1 extra revision session.
-            
-            OUTPUT:
-            Return ONLY a raw JSON array of task objects.
-            Format: [{"subject": "${plan.level || plan.skill}", "topic": "...", "subtopic": "...", "duration": "...", "date": "YYYY-MM-DD", "sessionType": "...", "aiExplanation": "...", "status": "pending"}]`;
+            // Iterate through every plan (Exam or Skill)
+            for (const entry of onboardingEntries) {
+                const plan = entry.onboardingData;
+                const planId = entry.id;
 
-            const result = await model.generateContent(prompt);
-            const responseTxt = result.response.text();
+                // 1. CHECK "Once Per Day" Rule
+                if (entry.lastReplanned === todayStr) {
+                    // console.log(`[PlanningEngine] Plan ${planId} (${plan.mode}) already replanned today.`);
+                    continue; // Skip without log spam
+                }
 
-            // Clean response
-            const cleanedJson = responseTxt.replace(/```json|```/g, '').trim();
-            const newTasks = JSON.parse(cleanedJson);
+                console.log(`[PlanningEngine] Processing plan ${planId} (${plan.mode || plan.level})...`);
 
-            if (Array.isArray(newTasks) && newTasks.length > 0) {
-                // 4. Persistence: Delete old pending/missed and save new
-                await deletePendingTasks(userEmail);
-                // Also clean up tasks with old dates that were missed
-                // (Already handled by passing them to AI and then deleting pending in DB)
+                // 2. Filter tasks relevant to THIS plan
+                // Match by subject. Ensure we default safely if no subject found.
+                const planSubject = plan.level || plan.skill || 'General';
 
-                // Add userEmail to each new task
-                const tasksToSave = newTasks.map(t => ({ ...t, userEmail }));
-                await saveTasks(userEmail, tasksToSave);
+                const planTasks = allTasks.filter(t => t.subject === planSubject);
+                const missedTasks = planTasks.filter(t => t.status === 'pending' && t.date < todayStr);
+                const pendingTasks = planTasks.filter(t => t.status === 'pending' && t.date >= todayStr);
+                const completedTasks = planTasks.filter(t => t.status === 'completed');
 
-                console.log(`[PlanningEngine] AI Replanned ${newTasks.length} tasks successfully.`);
-                return { redistributed: true, count: newTasks.length };
+                const examDate = plan.examDate;
+                const dailyHours = user.dailyHours || 4;
+                const totalCurrentTasks = pendingTasks.length + missedTasks.length;
+
+                // 3. Prepare AI Prompt
+                const moodMap = {
+                    'fresh': 'Focus on intense Core Learning and new complex topics. Energy is high.',
+                    'calm': 'Steady progress. Balanced mix of learning and moderate practice.',
+                    'okay': 'Neutral balance. Follow standard curriculum sequence.',
+                    'tired': 'Shift to Reinforcement Revision and light practice. Avoid heavy new theory.',
+                    'stressed': 'Focus on Comfort Revision and very easy tasks to build confidence.'
+                };
+
+                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+                const prompt = `You are an agentic study planner. Your goal is to REPLAN a student's schedule for ONE specific goal: "${planSubject}".
+                
+                CONTEXT:
+                - Today's Date: ${todayStr}
+                - Goal/Exam Date: ${examDate || 'No deadline'}
+                - User's Daily Target: ${dailyHours} hours/day
+                - User's Current Mood: ${currentMood.toUpperCase()} (${moodMap[currentMood] || 'Neutral'})
+                
+                STATUS:
+                - Completed Topics: ${completedTasks.map(t => t.subtopic).join(', ')}
+                - Unfinished/Missed Topics: ${[...missedTasks, ...pendingTasks].map(t => t.subtopic).join(', ')}
+                - Total Unfinished Tasks Count: ${totalCurrentTasks}
+                
+                RULES:
+                1. RE-DISTRIBUTE all unfinished topics starting from ${todayStr}.
+                2. MOOD RULE: strictly follow the mood strategy for TODAY (${todayStr}).
+                3. STABILITY: You MUST generate EXACTLY ${totalCurrentTasks} tasks unless "Crunch Mode" applies. Do NOT drop topics arbitrarily.
+                4. CRUNCH MODE: If today is within 3 days of the Exam (${examDate}), you may drop "Optional" or "Practice" tasks to fit the schedule.
+                5. NAMES: Ensure 'topic' and 'subtopic' are specific and descriptive.
+                
+                OUTPUT:
+                Return ONLY a raw JSON array of task objects.
+                Format: [{"subject": "${planSubject}", "topic": "Specific Topic Name", "subtopic": "Detailed Subtopic", "duration": "...", "date": "YYYY-MM-DD", "sessionType": "...", "aiExplanation": "...", "status": "pending"}]`;
+
+                try {
+                    const result = await model.generateContent(prompt);
+                    const responseTxt = result.response.text();
+                    const cleanedJson = responseTxt.replace(/```json|```/g, '').trim();
+                    const newTasks = JSON.parse(cleanedJson);
+
+                    if (Array.isArray(newTasks) && newTasks.length > 0) {
+                        // 4. Persistence
+                        // Delete ONLY pending tasks for THIS subject
+                        await deletePendingTasks(userEmail, planSubject);
+
+                        // Add userEmail to each new task
+                        const tasksToSave = newTasks.map(t => ({ ...t, userEmail }));
+                        await saveTasks(userEmail, tasksToSave);
+
+                        // 5. MARK PLAN AS UPDATED
+                        await updateOnboarding(entry.id, userEmail, { lastReplanned: todayStr });
+                        totalReplanned += newTasks.length;
+                        console.log(`[PlanningEngine] Replanned ${newTasks.length} tasks for ${planSubject}.`);
+                    }
+                } catch (err) {
+                    if (err.message && (err.message.includes('429') || err.message.includes('Quota') || err.message.includes('limit'))) {
+                        console.warn(`[PlanningEngine] Quota exceeded while replanning ${planSubject}. Skipping for now.`);
+                        return { redistributed: totalReplanned > 0, count: totalReplanned, warning: 'Quota Exceeded' };
+                    }
+                    console.error(`[PlanningEngine] Error replanning for ${planSubject}:`, err);
+                }
             }
 
-            return { redistributed: false };
+            return { redistributed: totalReplanned > 0, count: totalReplanned };
+
         } catch (error) {
             console.error('[PlanningEngine] ensureOptimalPlan AI error:', error);
             return { error: error.message };

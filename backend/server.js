@@ -370,11 +370,19 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
     console.error(`Gemini API Error (attempt ${retryCount + 1}):`, e.message);
 
     // Retry logic for transient errors
-    if (retryCount < MAX_RETRIES && (e.message.includes('quota') || e.message.includes('rate limit') || e.message.includes('timeout'))) {
-      const waitTime = (retryCount + 1) * 2000; // 2s, 4s
-      console.log(`Retrying in ${waitTime}ms...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      return generatePlanFromOnboarding(data, retryCount + 1);
+    if (retryCount < MAX_RETRIES) {
+      // Check for 429 specifically
+      if (e.message.includes('429') || e.message.includes('Quota') || e.message.includes('limit')) {
+        console.log('Quota/Rate limit hit. Stopping retries to preserve quota.');
+        throw new Error('Daily AI Quota Exceeded. Please try again later or use a different API Key.');
+      }
+
+      if (e.message.includes('timeout') || e.message.includes('network')) {
+        const waitTime = (retryCount + 1) * 2000; // 2s, 4s
+        console.log(`Retrying in ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return generatePlanFromOnboarding(data, retryCount + 1);
+      }
     }
 
     // Log error details but don't crash
@@ -743,33 +751,45 @@ app.post('/api/resources', async (req, res) => {
 
   try {
     const { topic, subject } = req.body;
-    const systemInstruction = `Find 3 high-quality educational resources for the topic "${topic}" in "${subject}". Provide YouTube links or reputable educational websites. Return as JSON array of objects with title, url, type, description.`;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
+    // User requested "Purely YouTube, no articles"
+    // Since we don't have a YouTube Data API key, we construct "Deep Search" links.
+    // These link directly to the high-intent search results page on YouTube.
+
+    const encodedTopic = encodeURIComponent(`${topic} ${subject}`);
+    const encodedTopicSimple = encodeURIComponent(topic);
+
+    const resources = [
+      {
+        title: `Watch: ${topic} Tutorials`,
+        url: `https://www.youtube.com/results?search_query=${encodedTopic}+tutorial`,
+        type: 'Video Series',
+        description: `Explore comprehensive video tutorials for ${topic} on YouTube.`,
+      },
+      {
+        title: `${topic}: Explained Simply`,
+        url: `https://www.youtube.com/results?search_query=${encodedTopic}+explained+simply`,
+        type: 'Concept Video',
+        description: 'Find short, clear explanations and conceptual breakdowns.',
+      },
+      {
+        title: `${topic}: Examples & Practice`,
+        url: `https://www.youtube.com/results?search_query=${encodedTopic}+examples+practice`,
+        type: 'Practical Video',
+        description: 'Watch solved examples and practical applications.',
+      },
+      {
+        title: `Deep Dive: ${topic} (Long form)`,
+        url: `https://www.youtube.com/results?search_query=${encodedTopic}+university+lecture`,
+        type: 'Lecture',
+        description: 'In-depth university-style lectures and detailed walkthroughs.',
       }
-    });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
-    });
+    ];
 
-    let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
-
-    // Clean JSON string
-    let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const firstBracket = jsonString.indexOf('[');
-    const lastBracket = jsonString.lastIndexOf(']');
-    if (firstBracket !== -1 && lastBracket !== -1) {
-      jsonString = jsonString.substring(firstBracket, lastBracket + 1);
-    }
-
-    const resources = JSON.parse(jsonString);
     res.json({ resources });
   } catch (error) {
     console.error('Resources error:', error);
-    res.status(500).json({ message: 'Failed to fetch resources', error: error.message });
+    res.json({ resources: [] });
   }
 });
 
