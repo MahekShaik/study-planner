@@ -73,6 +73,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ task, onFinish, examDate }) => 
         userAnswers,
         examDate
       );
+      console.log('[Quiz Debug] Evaluation result:', evalResult);
       setResult(evalResult);
     } catch (e) {
       console.error("Evaluation failed", e);

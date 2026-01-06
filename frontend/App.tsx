@@ -13,6 +13,8 @@ import OnboardingView from './components/OnboardingView';
 import UserProfile from './components/UserProfile';
 import AuthScreen from './components/AuthScreen';
 import ExamSelectionView from './components/ExamSelectionView';
+// MoodSnackbar usage removed in favor of dedicated screen
+import MoodCheckInScreen from './components/MoodCheckInScreen';
 
 import LandingPage from './components/LandingPage';
 
@@ -30,7 +32,8 @@ const App: React.FC = () => {
   const [activeTask, setActiveTask] = useState<StudyTask | null>(null);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ email: string; name: string; dailyHours: number } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ email: string; name: string; dailyHours: number; currentStreak?: number; streakHistory?: string[]; needsMoodCheck?: boolean } | null>(null);
+  // showMoodSnackbar removed
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Sync session on mount
@@ -47,9 +50,16 @@ const App: React.FC = () => {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
+      let shouldShowMoodCheck = false;
       if (profileResponse.ok) {
         const profile = await profileResponse.json();
         setUserProfile(profile);
+        // Show mood snackbar if user needs to log mood today
+        if (profile.needsMoodCheck) {
+          shouldShowMoodCheck = true;
+          // Set initial screen
+          setCurrentScreen('mood-check');
+        }
       }
 
       // Fetch Active Study Plan (includes both plan details and tasks)
@@ -63,8 +73,12 @@ const App: React.FC = () => {
         setSelectedPlan(plan);
         if (plan) {
           setAllPlans([plan]);
-          setCurrentScreen('dashboard');
+          // If we need mood check, keep it on that screen, otherwise go to dashboard
+          if (!shouldShowMoodCheck) {
+            setCurrentScreen('dashboard');
+          }
         } else {
+          // New user (no plan): Always go to onboarding first
           setCurrentScreen('onboarding');
         }
       } else if (response.status === 401) {
@@ -74,6 +88,32 @@ const App: React.FC = () => {
       console.error("Session hydration failed", e);
     }
   }
+
+  const handleMoodSubmit = async (mood: string) => {
+    try {
+      if (!token) return;
+
+      const response = await fetch('/api/user/mood', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ mood })
+      });
+
+      if (response.ok) {
+        // Update user profile to reflect mood has been logged
+        setUserProfile(prev => prev ? { ...prev, needsMoodCheck: false, currentMood: mood } : prev);
+        // Navigate to dashboard if plan exists, otherwise onboarding
+        setCurrentScreen(selectedPlan ? 'dashboard' : 'onboarding');
+      } else {
+        console.error('Failed to save mood');
+      }
+    } catch (error) {
+      console.error('Error saving mood:', error);
+    }
+  };
 
   const handleAuthSuccess = () => {
     const newToken = localStorage.getItem('authToken');
@@ -203,6 +243,31 @@ const App: React.FC = () => {
       }
     }
     setActiveTask(null);
+
+    // Update streak locally if returned from evaluation
+    console.log('[Streak Debug Frontend] Quiz result:', result);
+    if ((result as any).streakUpdate) {
+      console.log('[Streak Debug Frontend] Streak update found:', (result as any).streakUpdate);
+      setUserProfile(prev => prev ? ({ ...prev, currentStreak: (result as any).streakUpdate.newStreak }) : prev);
+    } else {
+      console.log('[Streak Debug Frontend] No streak update in result');
+    }
+
+    // Refresh user profile from server to get updated streak and history
+    if (token) {
+      try {
+        const profileResponse = await fetch('/api/user/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (profileResponse.ok) {
+          const profile = await profileResponse.json();
+          setUserProfile(profile);
+        }
+      } catch (e) {
+        console.error("Failed to refresh profile", e);
+      }
+    }
+
     setCurrentScreen('dashboard');
   }, [activeTask, token]);
 
@@ -275,10 +340,18 @@ const App: React.FC = () => {
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
             onViewResources={handleViewResources}
+            streak={userProfile?.currentStreak || 0}
+          />
+        );
+      case 'mood-check':
+        return (
+          <MoodCheckInScreen
+            onMoodSelected={handleMoodSubmit}
+            userName={userProfile?.name}
           />
         );
       case 'insights':
-        return <InsightsPanel insights={insights} />;
+        return <InsightsPanel insights={insights} streakHistory={userProfile?.streakHistory || []} />;
       case 'calendar':
         const calTasks = tasks.filter(t =>
           selectedPlan?.level === t.subject ||
@@ -310,6 +383,7 @@ const App: React.FC = () => {
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
             onViewResources={handleViewResources}
+            streak={userProfile?.currentStreak || 0}
           />
         );
     }
@@ -325,7 +399,7 @@ const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const isUtilityScreen = ['chat', 'resources', 'quiz', 'learning', 'auth', 'onboarding', 'exam-selection', 'landing'].includes(currentScreen);
+  const isUtilityScreen = ['chat', 'resources', 'quiz', 'learning', 'auth', 'onboarding', 'exam-selection', 'landing', 'mood-check'].includes(currentScreen);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -414,6 +488,8 @@ const App: React.FC = () => {
           </div>
         </footer>
       )}
+
+      {/* Mood Snackbar removed */}
     </div>
   );
 };

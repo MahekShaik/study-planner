@@ -80,6 +80,9 @@ async function createUser(email, name, hashedPassword, dailyHours = 4) {
         name,
         hashedPassword,
         dailyHours,
+        lastMoodDate: null,
+        currentMood: null,
+        moodHistory: [],
         createdAt: new Date().toISOString()
     };
 
@@ -226,13 +229,68 @@ async function updateTaskProgress(taskId, userEmail, updates) {
     return null;
 }
 
+// User update operation for streaks
+async function updateUser(email, updates) {
+    if (usersContainer) {
+        try {
+            // Cosmos DB requires partition key (email) to read the item
+            const querySpec = {
+                query: 'SELECT * FROM c WHERE c.email = @email',
+                parameters: [{ name: '@email', value: email }]
+            };
+            const { resources } = await usersContainer.items.query(querySpec).fetchAll();
+
+            if (resources.length > 0) {
+                const user = resources[0];
+                const updatedUser = { ...user, ...updates };
+                // Using email as partition key for replace might need id; 
+                // typical replace requires item(id, partitionKey)
+                const { resource } = await usersContainer.item(user.id, email).replace(updatedUser);
+                return resource;
+            }
+        } catch (error) {
+            console.error('Failed to update user in Cosmos DB, checking memory:', error.message);
+        }
+    }
+
+    const userIndex = memoryStore.users.findIndex(u => u.email === email);
+    if (userIndex !== -1) {
+        memoryStore.users[userIndex] = { ...memoryStore.users[userIndex], ...updates };
+        return memoryStore.users[userIndex];
+    }
+    return null;
+}
+
+async function deletePendingTasks(userEmail) {
+    if (tasksContainer) {
+        try {
+            const querySpec = {
+                query: 'SELECT * FROM c WHERE c.userEmail = @userEmail AND c.status = "pending"',
+                parameters: [{ name: '@userEmail', value: userEmail }]
+            };
+            const { resources } = await tasksContainer.items.query(querySpec).fetchAll();
+            for (const task of resources) {
+                await tasksContainer.item(task.id, userEmail).delete();
+            }
+            return true;
+        } catch (error) {
+            console.error('Failed to delete pending tasks in Cosmos DB, checking memory:', error.message);
+        }
+    }
+
+    memoryStore.tasks = memoryStore.tasks.filter(t => !(t.userEmail === userEmail && t.status === 'pending'));
+    return true;
+}
+
 module.exports = {
     initializeDatabase,
     createUser,
     getUserByEmail,
+    updateUser,
     createOnboarding,
     getOnboarding,
     saveTasks,
     getTasks,
-    updateTaskProgress
+    updateTaskProgress,
+    deletePendingTasks
 };

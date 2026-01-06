@@ -1,5 +1,5 @@
 
-export type Screen = 'landing' | 'auth' | 'onboarding' | 'dashboard' | 'quiz' | 'insights' | 'calendar' | 'chat' | 'resources' | 'user-profile' | 'learning' | 'exam-selection';
+export type Screen = 'landing' | 'auth' | 'onboarding' | 'dashboard' | 'quiz' | 'insights' | 'calendar' | 'chat' | 'resources' | 'user-profile' | 'learning' | 'exam-selection' | 'mood-check';
 
 export interface OnboardingData {
   mode: 'exam' | 'skill';
@@ -64,4 +64,13 @@ export interface StudyResource {
   url: string;
   type: 'video' | 'article' | 'website';
   description: string;
+}
+
+export interface UserProfile {
+  email: string;
+  name: string;
+  dailyHours: number;
+  currentStreak?: number;
+  lastStreakDate?: string;
+  streakHistory?: string[];
 }

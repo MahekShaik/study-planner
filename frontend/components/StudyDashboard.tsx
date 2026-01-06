@@ -8,9 +8,10 @@ interface StudyDashboardProps {
   onMarkCompleted: (task: StudyTask) => void;
   onStartNewPlan?: () => void;
   onViewResources: (task: StudyTask) => void;
+  streak?: number;
 }
 
-const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, onStartTask, onMarkCompleted, onStartNewPlan, onViewResources }) => {
+const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, onStartTask, onMarkCompleted, onStartNewPlan, onViewResources, streak = 0 }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
@@ -55,11 +56,16 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({ tasks, onboardingData, 
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mastery</span>
             <span className="text-xs font-bold text-primary">{progressPercent}%</span>
           </div>
-          <div className="h-1.5 w-32 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-1.5 w-32 bg-slate-100 rounded-full overflow-hidden mb-1">
             <div
               className="h-full bg-sage-primary transition-all duration-1000"
               style={{ width: `${progressPercent}%` }}
             />
+          </div>
+          {/* Streak Indicator */}
+          <div className="flex items-center gap-1.5 bg-orange-50 px-2 py-1 rounded-full border border-orange-100">
+            <span className="text-xs">🔥</span>
+            <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wide">{streak} Day Streak</span>
           </div>
         </div>
       </header>

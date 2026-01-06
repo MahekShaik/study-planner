@@ -10,8 +10,11 @@ const {
   getOnboarding,
   saveTasks,
   getTasks,
-  updateTaskProgress
+  updateTaskProgress,
+  updateUser
 } = require('./db');
+const PlanningEngine = require('./planningEngine');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -86,15 +89,81 @@ app.get('/api/user/profile', async (req, res) => {
     const user = await getUserByEmail(decoded.email);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    // Calculate if user needs to log mood today
+    const todayStr = new Date().toISOString().split('T')[0];
+    const needsMoodCheck = user.lastMoodDate !== todayStr;
+
+    // Log mood status to terminal for visibility
+    console.log(`[Mood Status] User: ${user.email}, Current Mood: ${user.currentMood || 'Not set'}, Needs Check: ${needsMoodCheck}`);
+
     // Return user profile without sensitive data
     res.json({
       email: user.email,
       name: user.name,
-      dailyHours: user.dailyHours || 4
+      dailyHours: user.dailyHours || 4,
+      currentStreak: user.currentStreak || 0,
+      lastStreakDate: user.lastStreakDate || null,
+      streakHistory: user.streakHistory || [],
+      lastMoodDate: user.lastMoodDate || null,
+      currentMood: user.currentMood || null,
+      needsMoodCheck
     });
   } catch (error) {
     console.error('Profile fetch error:', error);
     res.status(500).json({ message: 'Failed to fetch profile' });
+  }
+});
+
+// POST /api/user/mood - Save user's daily mood
+app.post('/api/user/mood', async (req, res) => {
+  const decoded = verifyToken(req);
+  if (!decoded) return res.status(401).json({ message: 'Unauthorized' });
+
+  try {
+    const { mood } = req.body;
+
+    if (!mood) {
+      return res.status(400).json({ message: 'Mood is required' });
+    }
+
+    const user = await getUserByEmail(decoded.email);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Check if mood was already logged today
+    if (user.lastMoodDate === todayStr) {
+      return res.status(400).json({ message: 'Mood already logged today' });
+    }
+
+    // Update mood history
+    const moodHistory = user.moodHistory || [];
+    moodHistory.push({
+      date: todayStr,
+      mood: mood,
+      timestamp: new Date().toISOString()
+    });
+
+    // Update user with new mood data
+    await updateUser(decoded.email, {
+      lastMoodDate: todayStr,
+      currentMood: mood,
+      moodHistory
+    });
+
+    console.log(`Mood logged for ${decoded.email}: ${mood}`);
+
+    // Mood-Aware Adjustments: Adjust remaining tasks for today
+    await PlanningEngine.adjustTasksForMood(decoded.email, mood);
+
+    res.json({
+      message: 'Mood saved successfully',
+      mood,
+      date: todayStr
+    });
+  } catch (error) {
+    console.error('Save mood error:', error);
+    res.status(500).json({ message: 'Failed to save mood' });
   }
 });
 
@@ -178,10 +247,9 @@ app.patch('/api/tasks/:id/progress', async (req, res) => {
 });
 
 // Gemini Initialization
-const { GoogleGenAI } = require('@google/genai');
 const genAIKey = process.env.GEMINI_API_KEY || process.env.API_KEY || 'MISSING_KEY';
 console.log("Configured API Key:", genAIKey === 'MISSING_KEY' ? 'MISSING' : (genAIKey.substring(0, 4) + '...'));
-const genAI = new GoogleGenAI({ apiKey: genAIKey });
+const genAI = new GoogleGenerativeAI(genAIKey);
 // Direct Gemini integration for syllabus extraction - Make.com integration has been removed.
 
 async function generatePlanFromOnboarding(data, retryCount = 0) {
@@ -245,12 +313,14 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
       parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives. Then, structure the study plan accurately based on this extracted material." });
     }
 
-    const result = await genAI.models.generateContent({
+    const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: parts }],
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: parts }]
     });
 
 
@@ -328,16 +398,24 @@ app.get('/api/study-plan/active', async (req, res) => {
     }
 
     const latestPlan = onboardingEntries[0].onboardingData;
-    const allTasks = await getTasks(decoded.email);
 
-    // Filter tasks somewhat loosely to avoid case-sensitivity issues
-    const validSubjects = [latestPlan.level, latestPlan.skill].filter(Boolean).map(s => s.toLowerCase());
+    // Get user's current mood for the replanner
+    const user = await getUserByEmail(decoded.email);
+    const currentMood = user ? user.currentMood : 'okay';
 
-    const planTasks = allTasks.filter(t => {
-      if (!t.subject) return false;
-      const taskSubject = t.subject.toLowerCase();
-      return validSubjects.some(s => taskSubject.includes(s) || s.includes(taskSubject));
-    });
+    // 1. Silent automatic replanning for missed days or mood shifts
+    await PlanningEngine.ensureOptimalPlan(decoded.email, currentMood);
+
+    // 2. Refresh tasks after potential redistribution
+    const planTasks = await (async () => {
+      const allTasks = await getTasks(decoded.email);
+      const validSubjects = [latestPlan.level, latestPlan.skill].filter(Boolean).map(s => s.toLowerCase());
+      return allTasks.filter(t => {
+        if (!t.subject) return false;
+        const taskSubject = t.subject.toLowerCase();
+        return validSubjects.some(s => taskSubject.includes(s) || s.includes(taskSubject));
+      });
+    })();
 
     console.log(`Active Plan: Found ${planTasks.length} tasks for user ${decoded.email}`);
     res.json({ plan: latestPlan, tasks: planTasks });
@@ -365,10 +443,13 @@ app.post('/api/study-plan/generate', async (req, res) => {
       throw new Error('Task generation returned empty array');
     }
 
-    console.log(`Generated ${generatedTasks.length} tasks, now persisting...`);
+    // 3. Apply Spaced Repetition (1-4-7 Rule) if time allows
+    const optimizedTasks = await PlanningEngine.applySpacedRepetition(generatedTasks, onboardingData.examDate);
 
-    // 3. Save generated tasks first
-    const savedTasks = await saveTasks(decoded.email, generatedTasks);
+    console.log(`Generated ${generatedTasks.length} tasks (Optimized to ${optimizedTasks.length}), now persisting...`);
+
+    // 4. Save generated tasks first
+    const savedTasks = await saveTasks(decoded.email, optimizedTasks);
 
     // 4. Only save onboarding data after tasks are successfully saved
     // 4. Only save onboarding data after tasks are successfully saved
@@ -421,8 +502,8 @@ RULES:
 
     // Requirement: Use stable flash model
     // Note: gemini-1.5-flash is not found in this environment; using gemini-2.5-flash which is stable here.
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent({
       contents: [
         { role: "user", parts: [{ text: `${systemInstruction}\n\nStudent question: ${message}` }] }
       ]
@@ -495,12 +576,14 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
 - For short answer, "options" can be empty or omitted.
 `;
 
-    const result = await genAI.models.generateContent({
+    const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
@@ -569,12 +652,14 @@ RULES:
 
 TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
 
-    const result = await genAI.models.generateContent({
+    const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
@@ -588,6 +673,62 @@ TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
     }
 
     const evaluation = JSON.parse(jsonString);
+
+    // Streak Logic
+    console.log(`[Streak Debug] Score: ${evaluation.score}, Total: ${evaluation.total}, Threshold: ${evaluation.total / 2}`);
+    if (evaluation.score > (evaluation.total / 2)) {
+      const user = await getUserByEmail(decoded.email);
+      console.log(`[Streak Debug] User found: ${!!user}, LastStreak: ${user?.lastStreakDate}, Current: ${user?.currentStreak}`);
+
+      if (user) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const lastStreakDate = user.lastStreakDate; // YYYY-MM-DD
+        let currentStreak = user.currentStreak || 0;
+
+        if (lastStreakDate === todayStr) {
+          console.log('[Streak Debug] Already maintained today');
+        } else {
+          // Calculate yesterday
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          console.log(`[Streak Debug] Yesterday was: ${yesterdayStr}`);
+
+          if (lastStreakDate === yesterdayStr) {
+            currentStreak += 1;
+          } else {
+            currentStreak = 1;
+          }
+          console.log(`[Streak Debug] New streak will be: ${currentStreak}`);
+
+          const streakHistory = user.streakHistory || [];
+          if (!streakHistory.includes(todayStr)) {
+            streakHistory.push(todayStr);
+          }
+
+          await updateUser(decoded.email, {
+            currentStreak,
+            lastStreakDate: todayStr,
+            streakHistory
+          });
+          console.log('[Streak Debug] User updated in DB');
+
+          // Attach streak info to response for frontend celebration
+          evaluation.streakUpdate = {
+            newStreak: currentStreak,
+            message: "Streak maintained!"
+          };
+        }
+      }
+    } else {
+      console.log('[Streak Debug] Score not high enough for streak');
+    }
+
+    // Performance-Based Replanning: Mark topic as weak if score is low (< 60%)
+    if (evaluation.score < (evaluation.total * 0.6)) {
+      await PlanningEngine.markTopicAsWeak(decoded.email, topic);
+    }
+
     res.json(evaluation);
   } catch (error) {
     console.error('Quiz evaluation error:', error);
@@ -604,12 +745,14 @@ app.post('/api/resources', async (req, res) => {
     const { topic, subject } = req.body;
     const systemInstruction = `Find 3 high-quality educational resources for the topic "${topic}" in "${subject}". Provide YouTube links or reputable educational websites. Return as JSON array of objects with title, url, type, description.`;
 
-    const result = await genAI.models.generateContent({
+    const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
@@ -648,7 +791,13 @@ app.post('/api/learning/content', async (req, res) => {
     }
 
     // Branch for Revision sessions
-    if (sessionType === 'Revision') {
+    const isRevision = sessionType && (
+      sessionType.includes('Revision') ||
+      sessionType.includes('Practice') ||
+      sessionType.includes('Focus')
+    );
+
+    if (isRevision) {
       try {
         const content = await generateRevisionWithAzureOpenAI(subject, topic, level, examDate, learningStyle, proximity);
         return res.json(content);
@@ -665,12 +814,14 @@ STRICT RULES:
 - TASK: Break "${topic}" in "${subject}" into logical subtopics and provide content for each. 
 - Return JSON object with "subparts" array.`;
 
-    const result = await genAI.models.generateContent({
+    const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));

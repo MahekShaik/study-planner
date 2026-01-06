@@ -4,15 +4,52 @@ import { AIInsight } from '../types';
 
 interface InsightsPanelProps {
   insights: AIInsight[];
+  streakHistory?: string[];
 }
 
-const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights }) => {
+const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, streakHistory = [] }) => {
+
+  // Generate last 14 days for the timeline
+  const days = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (13 - i));
+    return d.toISOString().split('T')[0];
+  });
+
   return (
     <div className="max-w-2xl mx-auto py-12 px-6 animate-fade-in">
       <header className="mb-12">
-        <h2 className="text-[#8FB38F] text-[11px] font-bold uppercase tracking-[0.2em] mb-2">AI Analysis</h2>
-        <h1 className="text-3xl font-bold text-[#2D3E35] tracking-tight">Plan Reasoning</h1>
-        <p className="text-slate-500 font-light mt-2">How your study path evolves with your daily performance.</p>
+        <h2 className="text-[#8FB38F] text-[11px] font-bold uppercase tracking-[0.2em] mb-2">AI Analysis & Habits</h2>
+        <h1 className="text-3xl font-bold text-[#2D3E35] tracking-tight">Insights</h1>
+
+        {/* Streak Calendar */}
+        <div className="mt-8 bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+            <span className="text-lg">🔥</span> Recent Activity
+          </h3>
+          <div className="grid grid-cols-7 gap-2">
+            {days.map(date => {
+              const isStreakDay = streakHistory.includes(date);
+              const dayNum = new Date(date).getDate();
+              const isToday = date === new Date().toISOString().split('T')[0];
+
+              return (
+                <div key={date} className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold transition-all
+                   ${isStreakDay
+                    ? 'bg-orange-50 border border-orange-100 text-orange-500 shadow-sm'
+                    : isToday
+                      ? 'bg-slate-100 border border-slate-200 text-slate-400'
+                      : 'bg-white border border-slate-50 text-slate-300'
+                  }
+                 `}>
+                  {isStreakDay ? '🔥' : dayNum}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-3 text-center font-medium">Last 14 Days</p>
+        </div>
+
       </header>
 
       <div className="space-y-6">
