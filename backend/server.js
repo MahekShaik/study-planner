@@ -89,9 +89,24 @@ app.get('/api/user/profile', async (req, res) => {
     const user = await getUserByEmail(decoded.email);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Calculate if user needs to log mood today
+    // Streak Logic: Check if streak is broken
     const todayStr = new Date().toISOString().split('T')[0];
     const needsMoodCheck = user.lastMoodDate !== todayStr;
+    const lastStreakDate = user.lastStreakDate;
+    let currentStreak = user.currentStreak || 0;
+
+    // Calculate yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // If streak was not updated today AND not updated yesterday, it is broken (unless it's 0 already)
+    if (currentStreak > 0 && lastStreakDate !== todayStr && lastStreakDate !== yesterdayStr) {
+      console.log(`[Streak Fix] Resetting streak for ${user.email}. Last: ${lastStreakDate}, Yesterday: ${yesterdayStr}`);
+      currentStreak = 0;
+      // Update DB to reflect broken streak
+      await updateUser(decoded.email, { currentStreak: 0 });
+    }
 
     // Log mood status to terminal for visibility
     console.log(`[Mood Status] User: ${user.email}, Current Mood: ${user.currentMood || 'Not set'}, Needs Check: ${needsMoodCheck}`);
@@ -101,7 +116,7 @@ app.get('/api/user/profile', async (req, res) => {
       email: user.email,
       name: user.name,
       dailyHours: user.dailyHours || 4,
-      currentStreak: user.currentStreak || 0,
+      currentStreak: currentStreak,
       lastStreakDate: user.lastStreakDate || null,
       streakHistory: user.streakHistory || [],
       lastMoodDate: user.lastMoodDate || null,

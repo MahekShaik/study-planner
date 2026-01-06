@@ -22,7 +22,34 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
   const [isUploading, setIsUploading] = useState(false);
 
   const selectMode = (mode: 'exam' | 'skill') => {
-    setData({ ...data, mode });
+    // Reset fields relevant to specific modes to prevent data leakage (e.g. syllabus files from exam mode leaking to skill mode)
+    if (mode === 'exam') {
+      setData({
+        mode: 'exam',
+        level: '',
+        skill: '', // clear skill
+        skillDuration: '', // clear duration
+        syllabus: '',
+        syllabusFiles: [], // Clear files
+        examDate: '',
+        planType: 'balanced',
+        hoursPerDay: userDailyHours,
+        learningStyle: data.learningStyle
+      } as OnboardingData);
+    } else {
+      setData({
+        mode: 'skill',
+        level: '', // clear fluency target
+        skill: '',
+        skillDuration: '4 weeks', // default
+        syllabus: '', // clear syllabus
+        syllabusFiles: [], // Clear files
+        examDate: '', // clear exam date
+        planType: 'balanced',
+        hoursPerDay: userDailyHours,
+        learningStyle: data.learningStyle
+      } as OnboardingData);
+    }
     setStep('details');
   };
 
@@ -301,12 +328,18 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
 
               <div>
                 <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Fluency Target</label>
-                <input
+                <select
                   required
-                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:ring-4 focus:ring-[var(--sage-primary)]/10 focus:border-[var(--sage-primary)] transition-all text-slate-700 placeholder:text-slate-300 text-lg"
-                  placeholder="e.g. Mid-level mastery"
+                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:ring-4 focus:ring-[var(--sage-primary)]/10 focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg appearance-none cursor-pointer"
+                  value={data.level || ''}
                   onChange={(e) => setData({ ...data, level: e.target.value })}
-                />
+                >
+                  <option value="" disabled>Select your goal level</option>
+                  <option value="Beginner">Beginner (Foundations)</option>
+                  <option value="Intermediate">Intermediate (Competent)</option>
+                  <option value="Advanced">Advanced (Expert)</option>
+                  <option value="Mastery">Mastery (World Class)</option>
+                </select>
               </div>
 
               <div>
@@ -316,17 +349,42 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                   className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:ring-4 focus:ring-[var(--sage-primary)]/10 focus:border-[var(--sage-primary)] transition-all text-slate-700 placeholder:text-slate-300 text-lg"
                   placeholder="e.g. Modern UI Design with Figma"
                   onChange={(e) => setData({ ...data, skill: e.target.value })}
+                  value={data.skill || ''}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Duration</label>
-                <input
-                  required
-                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
-                  placeholder="e.g. 8 weeks"
-                  onChange={(e) => setData({ ...data, skillDuration: e.target.value })}
-                />
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Duration (Weeks)</label>
+                <div className="flex items-center gap-4 bg-white p-2 border border-[var(--sage-border)] rounded-[24px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentWeeks = parseInt(data.skillDuration?.split(' ')[0] || '4');
+                      const newWeeks = Math.max(1, currentWeeks - 1);
+                      setData({ ...data, skillDuration: `${newWeeks} weeks` });
+                    }}
+                    className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-100 text-[var(--sage-primary)] hover:bg-[var(--sage-primary)] hover:text-white transition-all font-bold text-xl"
+                  >
+                    −
+                  </button>
+                  <div className="flex-1 text-center">
+                    <span className="text-2xl font-bold text-[var(--primary)]">
+                      {parseInt(data.skillDuration?.split(' ')[0] || '4')}
+                    </span>
+                    <span className="text-sm text-slate-400 font-medium ml-2">weeks</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentWeeks = parseInt(data.skillDuration?.split(' ')[0] || '4');
+                      const newWeeks = Math.min(52, currentWeeks + 1);
+                      setData({ ...data, skillDuration: `${newWeeks} weeks` });
+                    }}
+                    className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-100 text-[var(--sage-primary)] hover:bg-[var(--sage-primary)] hover:text-white transition-all font-bold text-xl"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               <PlanTypeSelector />
