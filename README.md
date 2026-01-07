@@ -34,7 +34,7 @@ SereneStudy AI combines modern web technologies with AI to create a stress-free 
 ### Backend
 - **Node.js** with Express
 - **Azure Cosmos DB** for data persistence
-- **Google Gemini AI** (gemini-2.5-flash) for AI features
+- **Google Gemini AI** (gemini-1.5-flash) for AI features
 - **bcrypt** for secure password hashing
 - **CORS** enabled for cross-origin requests
 

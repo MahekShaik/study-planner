@@ -1,17 +1,37 @@
 require('dotenv').config();
 const { CosmosClient } = require('@azure/cosmos');
 
-// Disable SSL verification for Cosmos DB Emulator (self-signed certificate)
-// Remove this in production!
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || 'https://localhost:8081';
+const COSMOS_DATABASE_NAME = process.env.COSMOS_DATABASE_NAME || 'serenestudy';
 
-// Initialize Cosmos DB client
+// Conditional SSL verification
+if (COSMOS_ENDPOINT.includes('localhost') || COSMOS_ENDPOINT.includes('127.0.0.1')) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    console.log('SSL verification disabled for local Cosmos Emulator');
+}
+
+// Emulator fixed key - fallback for teammates when cloud keys are restricted
+const EMULATOR_KEY = 'C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==';
+
+let COSMOS_KEY = process.env.COSMOS_KEY;
+
+console.log(`Cosmos Endpoint: ${COSMOS_ENDPOINT}`);
+if (COSMOS_KEY) {
+    console.log(`Cosmos Key: ${COSMOS_KEY.substring(0, 5)}... (len: ${COSMOS_KEY.length})`);
+} else {
+    console.warn('WARNING: COSMOS_KEY is missing in .env');
+    if (COSMOS_ENDPOINT.includes('localhost')) {
+        console.log('Using default emulator key for localhost.');
+        COSMOS_KEY = EMULATOR_KEY;
+    }
+}
+
 const client = new CosmosClient({
-    endpoint: process.env.COSMOS_ENDPOINT,
-    key: process.env.COSMOS_KEY
+    endpoint: COSMOS_ENDPOINT,
+    key: COSMOS_KEY
 });
 
-const databaseName = process.env.COSMOS_DATABASE_NAME;
+const databaseName = COSMOS_DATABASE_NAME;
 const usersContainerName = process.env.COSMOS_USERS_CONTAINER;
 const onboardingContainerName = process.env.COSMOS_ONBOARDING_CONTAINER;
 
@@ -24,7 +44,17 @@ let tasksContainer;
 
 // In-memory fallback storage
 const memoryStore = {
-    users: [],
+    users: [
+        {
+            id: 'demo-user-id',
+            email: 'demo@serenestudy.ai',
+            name: 'Demo User',
+            // Hash for 'password123'
+            hashedPassword: '$2b$10$Kz6u8MSmXOfDrYzOQcbZSeJp5PNd0JbCXZYY4P1ez5lK1oJXxXELfu',
+            dailyHours: 4,
+            createdAt: new Date().toISOString()
+        }
+    ],
     onboarding: [],
     tasks: []
 };

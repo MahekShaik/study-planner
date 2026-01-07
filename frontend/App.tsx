@@ -54,7 +54,7 @@ const App: React.FC = () => {
 
       // Fetch Active Study Plan (includes both plan details and tasks)
       const response = await fetch('/api/study-plan/active', {
-        headers: { 'Authorization': `Bearer ${authToken} ` }
+        headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
       if (response.ok) {
@@ -89,7 +89,7 @@ const App: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token} `
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(data)
       });

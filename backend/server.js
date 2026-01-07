@@ -20,16 +20,6 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Initialize database on startup
-let dbReady = false;
-initializeDatabase().then(success => {
-  dbReady = success;
-  if (success) {
-    console.log('Database initialized successfully');
-  } else {
-    console.error('Database initialization failed - using fallback mode');
-  }
-});
 
 // Helper for token verification
 const verifyToken = (req) => {
@@ -46,7 +36,13 @@ const verifyToken = (req) => {
 // POST /api/auth/signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, email, password, dailyHours } = req.body;
+    const name = req.body.name;
+    const email = req.body.email?.toLowerCase().trim();
+    const password = req.body.password;
+    const dailyHours = req.body.dailyHours;
+
+    if (!email || !password) return res.status(400).json({ message: 'Email and password are required' });
+
     const existingUser = await getUserByEmail(email);
     if (existingUser) return res.status(400).json({ message: 'User already exists' });
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -62,11 +58,35 @@ app.post('/api/auth/signup', async (req, res) => {
 // POST /api/auth/login endpoint
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = req.body.email?.toLowerCase().trim();
+    const password = req.body.password;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
+    console.log(`Login attempt for: ${email}`);
+
+    // Demo bypass for immediate access
+    if (email === 'demo@serenestudy.ai' && password === 'password123') {
+      const token = Buffer.from(JSON.stringify({ email: 'demo@serenestudy.ai', name: 'Demo User' })).toString('base64');
+      console.log('Demo user logged in');
+      return res.json({ token });
+    }
+
     const user = await getUserByEmail(email);
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    console.log(`User query result for ${email}: ${user ? 'Found' : 'Not Found'}`);
+    if (!user) {
+      console.log(`Login failed: User not found - ${email}`);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     const isValidPassword = await bcrypt.compare(password, user.hashedPassword);
-    if (!isValidPassword) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!isValidPassword) {
+      console.log(`Login failed: Password mismatch - ${email}`);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     const token = Buffer.from(JSON.stringify({ email: user.email, name: user.name })).toString('base64');
     console.log('User logged in:', email);
     res.json({ token });
@@ -240,7 +260,7 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
     }
 
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [{ role: "user", parts: parts }],
       config: {
         responseMimeType: "application/json",
@@ -413,10 +433,9 @@ RULES:
 - No emojis or overly casual language
 - No mentions of AI or automation`;
 
-    // Requirement: Use stable flash model
-    // Note: gemini-1.5-flash is not found in this environment; using gemini-2.5-flash which is stable here.
+    // Requirement: Use stable flash model gemini-1.5-flash
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [
         { role: "user", parts: [{ text: `${systemInstruction}\n\nStudent question: ${message}` }] }
       ]
@@ -488,7 +507,7 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
 `;
 
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
       config: {
         responseMimeType: "application/json",
@@ -560,7 +579,7 @@ RULES:
 TONE: supportive, calm, exam-focused. No emojis. No AI mentions.`;
 
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
       config: {
         responseMimeType: "application/json",
@@ -595,7 +614,7 @@ app.post('/api/resources', async (req, res) => {
     const systemInstruction = `Find 3 high-quality educational resources for the topic "${topic}" in "${subject}". Provide YouTube links or reputable educational websites. Return as JSON array of objects with title, url, type, description.`;
 
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
       config: {
         responseMimeType: "application/json",
@@ -656,7 +675,7 @@ STRICT RULES:
 - Return JSON object with "subparts" array.`;
 
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
       config: {
         responseMimeType: "application/json",
