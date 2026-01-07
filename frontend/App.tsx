@@ -13,6 +13,8 @@ import OnboardingView from './components/OnboardingView';
 import UserProfile from './components/UserProfile';
 import AuthScreen from './components/AuthScreen';
 import ExamSelectionView from './components/ExamSelectionView';
+// MoodSnackbar usage removed in favor of dedicated screen
+import MoodCheckInScreen from './components/MoodCheckInScreen';
 
 import LandingPage from './components/LandingPage';
 
@@ -30,7 +32,8 @@ const App: React.FC = () => {
   const [activeTask, setActiveTask] = useState<StudyTask | null>(null);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ email: string; name: string; dailyHours: number } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ email: string; name: string; dailyHours: number; currentStreak?: number; streakHistory?: string[]; needsMoodCheck?: boolean } | null>(null);
+  // showMoodSnackbar removed
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Sync session on mount
@@ -42,38 +45,81 @@ const App: React.FC = () => {
 
   async function hydrateSession(authToken: string) {
     try {
-      // Fetch user profile first
+      // Fetch user profile
       const profileResponse = await fetch('/api/user/profile', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
+      let shouldShowMoodCheck = false;
       if (profileResponse.ok) {
         const profile = await profileResponse.json();
         setUserProfile(profile);
+        if (profile.needsMoodCheck) {
+          shouldShowMoodCheck = true;
+          setCurrentScreen('mood-check');
+        }
       }
 
-      // Fetch Active Study Plan (includes both plan details and tasks)
-      const response = await fetch('/api/study-plan/active', {
+      // Fetch ALL Plans
+      const plansResponse = await fetch('/api/onboarding', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
-      if (response.ok) {
-        const { plan, tasks } = await response.json();
-        setTasks(tasks || []);
-        setSelectedPlan(plan);
-        if (plan) {
-          setAllPlans([plan]);
-          setCurrentScreen('dashboard');
+      // Fetch ALL Tasks
+      const tasksResponse = await fetch('/api/tasks', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+
+      if (plansResponse.ok && tasksResponse.ok) {
+        const plans = await plansResponse.json();
+        const allTasks = await tasksResponse.json();
+
+        setAllPlans(plans || []);
+        setTasks(allTasks || []);
+
+        if (plans.length > 0) {
+          // Default to the most recent plan (first in list usually, or just 0)
+          setSelectedPlan(plans[0]);
+
+          if (!shouldShowMoodCheck) {
+            setCurrentScreen('dashboard');
+          }
         } else {
           setCurrentScreen('onboarding');
         }
-      } else if (response.status === 401) {
+      } else if (plansResponse.status === 401 || tasksResponse.status === 401) {
         handleExitSession();
       }
     } catch (e) {
       console.error("Session hydration failed", e);
     }
   }
+
+  const handleMoodSubmit = async (mood: string) => {
+    try {
+      if (!token) return;
+
+      const response = await fetch('/api/user/mood', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ mood })
+      });
+
+      if (response.ok) {
+        // Update user profile to reflect mood has been logged
+        setUserProfile(prev => prev ? { ...prev, needsMoodCheck: false, currentMood: mood } : prev);
+        // Navigate to dashboard if plan exists, otherwise onboarding
+        setCurrentScreen(selectedPlan ? 'dashboard' : 'onboarding');
+      } else {
+        console.error('Failed to save mood');
+      }
+    } catch (error) {
+      console.error('Error saving mood:', error);
+    }
+  };
 
   const handleAuthSuccess = () => {
     const newToken = localStorage.getItem('authToken');
@@ -89,15 +135,16 @@ const App: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token} `
         },
         body: JSON.stringify(data)
       });
 
       if (response.ok) {
-        const { plan, tasks } = await response.json();
+        const { plan, tasks: newTasks } = await response.json();
         setSelectedPlan(plan);
-        setTasks(tasks || []);
+        // Append new tasks instead of replacing
+        setTasks(prev => [...prev, ...(newTasks || [])]);
         setAllPlans(prev => [...prev, plan]);
         setCurrentScreen('dashboard');
       } else {
@@ -203,6 +250,31 @@ const App: React.FC = () => {
       }
     }
     setActiveTask(null);
+
+    // Update streak locally if returned from evaluation
+    console.log('[Streak Debug Frontend] Quiz result:', result);
+    if ((result as any).streakUpdate) {
+      console.log('[Streak Debug Frontend] Streak update found:', (result as any).streakUpdate);
+      setUserProfile(prev => prev ? ({ ...prev, currentStreak: (result as any).streakUpdate.newStreak }) : prev);
+    } else {
+      console.log('[Streak Debug Frontend] No streak update in result');
+    }
+
+    // Refresh user profile from server to get updated streak and history
+    if (token) {
+      try {
+        const profileResponse = await fetch('/api/user/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (profileResponse.ok) {
+          const profile = await profileResponse.json();
+          setUserProfile(profile);
+        }
+      } catch (e) {
+        console.error("Failed to refresh profile", e);
+      }
+    }
+
     setCurrentScreen('dashboard');
   }, [activeTask, token]);
 
@@ -240,8 +312,14 @@ const App: React.FC = () => {
       case 'dashboard':
       case 'learning':
       case 'quiz':
-        // The tasks in state are the tasks for the current plan
-        const filteredTasks = tasks;
+        // Filter tasks to match the currently selected plan (by level/skill matches)
+        const activePlanKeyword = selectedPlan?.mode === 'exam' ? selectedPlan.level : selectedPlan?.skill;
+        const filteredTasks = tasks.filter(t => {
+          if (!activePlanKeyword) return true; // Show all if no plan selected (fallback)
+          const taskSubject = (t.subject || '').toLowerCase();
+          const planSubject = activePlanKeyword.toLowerCase();
+          return taskSubject.includes(planSubject) || planSubject.includes(taskSubject);
+        });
 
         if (currentScreen === 'learning' && activeTask) {
           return (
@@ -271,14 +349,24 @@ const App: React.FC = () => {
           <StudyDashboard
             tasks={filteredTasks}
             onboardingData={selectedPlan}
+            allPlans={allPlans}
             onStartTask={handleStartTask}
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
+            onSelectPlan={handleSelectPlan}
             onViewResources={handleViewResources}
+            streak={userProfile?.currentStreak || 0}
+          />
+        );
+      case 'mood-check':
+        return (
+          <MoodCheckInScreen
+            onMoodSelected={handleMoodSubmit}
+            userName={userProfile?.name}
           />
         );
       case 'insights':
-        return <InsightsPanel insights={insights} />;
+        return <InsightsPanel insights={insights} streakHistory={userProfile?.streakHistory || []} />;
       case 'calendar':
         const calTasks = tasks.filter(t =>
           selectedPlan?.level === t.subject ||
@@ -304,12 +392,15 @@ const App: React.FC = () => {
       default:
         return (
           <StudyDashboard
-            tasks={tasks.filter(t => selectedPlan?.level === t.subject || selectedPlan?.skill === t.subject)}
+            tasks={tasks}
             onboardingData={selectedPlan}
+            allPlans={allPlans}
             onStartTask={handleStartTask}
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
+            onSelectPlan={handleSelectPlan}
             onViewResources={handleViewResources}
+            streak={userProfile?.currentStreak || 0}
           />
         );
     }
@@ -325,17 +416,44 @@ const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const isUtilityScreen = ['chat', 'resources', 'quiz', 'learning', 'auth', 'onboarding', 'exam-selection', 'landing'].includes(currentScreen);
+  const isUtilityScreen = ['chat', 'resources', 'quiz', 'learning', 'auth', 'onboarding', 'exam-selection', 'landing', 'mood-check'].includes(currentScreen);
+  const isLayoutManagedScreen = ['dashboard', 'calendar', 'insights', 'user-profile'].includes(currentScreen);
 
   return (
     <div className="min-h-screen flex flex-col">
       {currentScreen !== 'landing' && (
-        <button
-          onClick={() => setCurrentScreen('landing')}
-          className="fixed top-6 right-6 z-[60] px-5 py-2.5 bg-white/80 backdrop-blur-md border border-slate-200 rounded-full text-xs font-bold text-slate-600 uppercase tracking-widest shadow-sm hover:bg-white hover:text-indigo-600 hover:shadow-md hover:scale-105 active:scale-95 transition-all"
-        >
-          Home
-        </button>
+        <>
+          {/* Global Back Button */}
+          <button
+            onClick={() => {
+              // Clear active task state when navigating back
+              setActiveTask(null);
+
+              const backToDashboard = ['learning', 'quiz', 'insights', 'calendar', 'chat', 'resources', 'user-profile', 'exam-selection'];
+
+              if (backToDashboard.includes(currentScreen)) {
+                setCurrentScreen('dashboard');
+              } else {
+                // Default back to landing for Auth, Onboarding, Dashboard, Mood-Check
+                handleExitSession(); // Ensure clean exit for Auth/Dashboard -> Landing
+              }
+            }}
+            className="fixed top-6 left-6 z-[60] px-5 py-2.5 bg-white/80 backdrop-blur-md border border-slate-200 rounded-full text-xs font-bold text-slate-600 uppercase tracking-widest shadow-sm hover:bg-white hover:text-indigo-600 hover:shadow-md hover:scale-105 active:scale-95 transition-all group flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back
+          </button>
+
+          {/* Global Home Button */}
+          <button
+            onClick={handleExitSession}
+            className="fixed top-6 right-6 z-[60] px-5 py-2.5 bg-white/80 backdrop-blur-md border border-slate-200 rounded-full text-xs font-bold text-slate-600 uppercase tracking-widest shadow-sm hover:bg-white hover:text-indigo-600 hover:shadow-md hover:scale-105 active:scale-95 transition-all"
+          >
+            Home
+          </button>
+        </>
       )}
 
       {/* Main App Navigation (Floating Dock) */}
@@ -400,8 +518,9 @@ const App: React.FC = () => {
         </nav>
       )}
 
-      <main className={`flex-1 flex flex-col items-center justify-center ${!isUtilityScreen ? 'mt-32' : ''} animate-fade-in w-full`}>
-        <div className={`w-full ${['landing', 'auth'].includes(currentScreen) ? '' : 'max-w-4xl'}`}>
+      {/* Updated Main Layout: Remove default centering and margin for layout-managed screens */}
+      <main className={`flex-1 flex flex-col ${isLayoutManagedScreen ? 'items-stretch w-full' : 'items-center justify-center'} ${(!isUtilityScreen && !isLayoutManagedScreen) ? 'mt-32' : ''} animate-fade-in w-full`}>
+        <div className={`w-full ${(['landing', 'auth'].includes(currentScreen) || isLayoutManagedScreen) ? '' : 'max-w-4xl'}`}>
           {renderScreen()}
         </div>
       </main>
@@ -414,6 +533,8 @@ const App: React.FC = () => {
           </div>
         </footer>
       )}
+
+      {/* Mood Snackbar removed */}
     </div>
   );
 };

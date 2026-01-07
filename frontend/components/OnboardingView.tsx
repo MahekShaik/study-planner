@@ -19,9 +19,37 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
     hoursPerDay: userDailyHours
   } as OnboardingData);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const selectMode = (mode: 'exam' | 'skill') => {
-    setData({ ...data, mode });
+    // Reset fields relevant to specific modes to prevent data leakage (e.g. syllabus files from exam mode leaking to skill mode)
+    if (mode === 'exam') {
+      setData({
+        mode: 'exam',
+        level: '',
+        skill: '', // clear skill
+        skillDuration: '', // clear duration
+        syllabus: '',
+        syllabusFiles: [], // Clear files
+        examDate: '',
+        planType: 'balanced',
+        hoursPerDay: userDailyHours,
+        learningStyle: data.learningStyle
+      } as OnboardingData);
+    } else {
+      setData({
+        mode: 'skill',
+        level: '', // clear fluency target
+        skill: '',
+        skillDuration: '4 weeks', // default
+        syllabus: '', // clear syllabus
+        syllabusFiles: [], // Clear files
+        examDate: '', // clear exam date
+        planType: 'balanced',
+        hoursPerDay: userDailyHours,
+        learningStyle: data.learningStyle
+      } as OnboardingData);
+    }
     setStep('details');
   };
 
@@ -42,20 +70,56 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles) return;
+
+    const currentFiles = data.syllabusFiles || [];
+    if (currentFiles.length + selectedFiles.length > 10) {
+      alert("You can upload a maximum of 10 files.");
+      return;
+    }
+
+    setIsUploading(true);
+    const newFiles: { name: string, data: string, type: string }[] = [...currentFiles];
+    let processedCount = 0;
+
+    Array.from(selectedFiles).forEach((file: File) => {
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        const base64String = ev.target?.result as string;
-        // base64String looks like "data:application/pdf;base64,....."
-        if (base64String) {
-          const mimeType = base64String.split(';')[0].split(':')[1];
-          const base64Data = base64String.split(',')[1];
-          setData({ ...data, documentData: base64Data, mimeType: mimeType });
+      reader.onload = (event: ProgressEvent<FileReader>) => {
+        const base64Content = event.target?.result as string;
+        if (!base64Content) {
+          processedCount++;
+          if (processedCount === selectedFiles.length) setIsUploading(false);
+          return;
+        }
+
+        // Extract pure base64 if it's a data URL
+        const base64Data = base64Content.includes('base64,') ? base64Content.split('base64,')[1] : base64Content;
+
+        newFiles.push({
+          name: file.name,
+          data: base64Data,
+          type: file.type || 'application/octet-stream'
+        });
+
+        processedCount++;
+        if (processedCount === selectedFiles.length) {
+          setData(prev => ({ ...prev, syllabusFiles: newFiles }));
+          setIsUploading(false);
         }
       };
+      reader.onerror = () => {
+        processedCount++;
+        if (processedCount === selectedFiles.length) setIsUploading(false);
+      };
       reader.readAsDataURL(file);
-    }
+    });
+  };
+
+  const removeFile = (index: number) => {
+    const currentFiles = data.syllabusFiles || [];
+    const newFiles = currentFiles.filter((_, i) => i !== index);
+    setData({ ...data, syllabusFiles: newFiles });
   };
 
 
@@ -189,29 +253,54 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Upload Syllabus/Materials (Optional)</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="file"
-                    accept=".pdf,.txt,.md"
-                    onChange={handleFileUpload}
-                    className="block w-full text-sm text-slate-500
-                        file:mr-4 file:py-2.5 file:px-4
-                        file:rounded-full file:border-0
-                        file:text-xs file:font-semibold
-                        file:bg-[var(--sage-light)] file:text-[var(--primary)]
-                        hover:file:bg-[var(--sage-light)]/80 cursor-pointer"
-                  />
-                  {data.documentData && (
-                    <span className="text-emerald-500 text-xs font-bold flex items-center gap-1 animate-fade-in">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                      Ready
-                    </span>
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Syllabus Documents (Optional - Max 10)</label>
+                <div className="space-y-4">
+                  <div className="relative">
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="syllabus-upload"
+                      disabled={isUploading}
+                    />
+                    <label
+                      htmlFor="syllabus-upload"
+                      className={`flex items-center justify-center gap-3 w-full p-5 border-2 border-dashed border-[var(--sage-border)] rounded-[24px] cursor-pointer hover:border-[var(--sage-primary)] hover:bg-[var(--sage-primary)]/5 transition-all text-slate-500 font-medium ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      {isUploading ? 'Processing files...' : 'Upload PDF, PowerPoint, Word or Images'}
+                    </label>
+                  </div>
+
+                  {data.syllabusFiles && data.syllabusFiles.length > 0 && (
+                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto no-scrollbar p-2">
+                      {data.syllabusFiles.map((file, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm animate-fade-in shadow-sm">
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <span className="text-xl">
+                              {file.type.includes('image') ? '🖼️' : file.type.includes('pdf') ? '📄' : file.type.includes('presentation') ? '📊' : '📁'}
+                            </span>
+                            <span className="truncate text-slate-600 font-medium">{file.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(idx)}
+                            className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-2 ml-1">Accepted: PDF, Text. AI will use this to structure your plan.</p>
               </div>
-
 
               <div>
                 <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Deadline</label>
@@ -222,6 +311,7 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                   onChange={(e) => setData({ ...data, examDate: e.target.value })}
                 />
               </div>
+
 
               <PlanTypeSelector />
 
@@ -238,12 +328,18 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
 
               <div>
                 <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Fluency Target</label>
-                <input
+                <select
                   required
-                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:ring-4 focus:ring-[var(--sage-primary)]/10 focus:border-[var(--sage-primary)] transition-all text-slate-700 placeholder:text-slate-300 text-lg"
-                  placeholder="e.g. Mid-level mastery"
+                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:ring-4 focus:ring-[var(--sage-primary)]/10 focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg appearance-none cursor-pointer"
+                  value={data.level || ''}
                   onChange={(e) => setData({ ...data, level: e.target.value })}
-                />
+                >
+                  <option value="" disabled>Select your goal level</option>
+                  <option value="Beginner">Beginner (Foundations)</option>
+                  <option value="Intermediate">Intermediate (Competent)</option>
+                  <option value="Advanced">Advanced (Expert)</option>
+                  <option value="Mastery">Mastery (World Class)</option>
+                </select>
               </div>
 
               <div>
@@ -253,17 +349,42 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
                   className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:ring-4 focus:ring-[var(--sage-primary)]/10 focus:border-[var(--sage-primary)] transition-all text-slate-700 placeholder:text-slate-300 text-lg"
                   placeholder="e.g. Modern UI Design with Figma"
                   onChange={(e) => setData({ ...data, skill: e.target.value })}
+                  value={data.skill || ''}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Duration</label>
-                <input
-                  required
-                  className="w-full p-5 border border-[var(--sage-border)] rounded-[24px] bg-white focus:outline-none focus:border-[var(--sage-primary)] transition-all text-slate-700 text-lg"
-                  placeholder="e.g. 8 weeks"
-                  onChange={(e) => setData({ ...data, skillDuration: e.target.value })}
-                />
+                <label className="block text-xs font-bold text-[var(--sage-primary)] uppercase tracking-[0.2em] mb-3 ml-1">Duration (Weeks)</label>
+                <div className="flex items-center gap-4 bg-white p-2 border border-[var(--sage-border)] rounded-[24px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentWeeks = parseInt(data.skillDuration?.split(' ')[0] || '4');
+                      const newWeeks = Math.max(1, currentWeeks - 1);
+                      setData({ ...data, skillDuration: `${newWeeks} weeks` });
+                    }}
+                    className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-100 text-[var(--sage-primary)] hover:bg-[var(--sage-primary)] hover:text-white transition-all font-bold text-xl"
+                  >
+                    −
+                  </button>
+                  <div className="flex-1 text-center">
+                    <span className="text-2xl font-bold text-[var(--primary)]">
+                      {parseInt(data.skillDuration?.split(' ')[0] || '4')}
+                    </span>
+                    <span className="text-sm text-slate-400 font-medium ml-2">weeks</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentWeeks = parseInt(data.skillDuration?.split(' ')[0] || '4');
+                      const newWeeks = Math.min(52, currentWeeks + 1);
+                      setData({ ...data, skillDuration: `${newWeeks} weeks` });
+                    }}
+                    className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-100 text-[var(--sage-primary)] hover:bg-[var(--sage-primary)] hover:text-white transition-all font-bold text-xl"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               <PlanTypeSelector />

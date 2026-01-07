@@ -10,16 +10,30 @@ const {
   getOnboarding,
   saveTasks,
   getTasks,
-  updateTaskProgress
+  updateTaskProgress,
+  updateUser
 } = require('./db');
+const PlanningEngine = require('./planningEngine');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Initialize database on startup
+let dbReady = false;
+initializeDatabase().then(success => {
+  dbReady = success;
+  if (success) {
+    console.log('Database initialized successfully');
+  } else {
+    console.error('Database initialization failed - using fallback mode');
+  }
+});
 
 // Helper for token verification
 const verifyToken = (req) => {
@@ -36,13 +50,7 @@ const verifyToken = (req) => {
 // POST /api/auth/signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const name = req.body.name;
-    const email = req.body.email?.toLowerCase().trim();
-    const password = req.body.password;
-    const dailyHours = req.body.dailyHours;
-
-    if (!email || !password) return res.status(400).json({ message: 'Email and password are required' });
-
+    const { name, email, password, dailyHours } = req.body;
     const existingUser = await getUserByEmail(email);
     if (existingUser) return res.status(400).json({ message: 'User already exists' });
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -58,35 +66,11 @@ app.post('/api/auth/signup', async (req, res) => {
 // POST /api/auth/login endpoint
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const email = req.body.email?.toLowerCase().trim();
-    const password = req.body.password;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
-    }
-
-    console.log(`Login attempt for: ${email}`);
-
-    // Demo bypass for immediate access
-    if (email === 'demo@serenestudy.ai' && password === 'password123') {
-      const token = Buffer.from(JSON.stringify({ email: 'demo@serenestudy.ai', name: 'Demo User' })).toString('base64');
-      console.log('Demo user logged in');
-      return res.json({ token });
-    }
-
+    const { email, password } = req.body;
     const user = await getUserByEmail(email);
-    console.log(`User query result for ${email}: ${user ? 'Found' : 'Not Found'}`);
-    if (!user) {
-      console.log(`Login failed: User not found - ${email}`);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
     const isValidPassword = await bcrypt.compare(password, user.hashedPassword);
-    if (!isValidPassword) {
-      console.log(`Login failed: Password mismatch - ${email}`);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
+    if (!isValidPassword) return res.status(401).json({ message: 'Invalid credentials' });
     const token = Buffer.from(JSON.stringify({ email: user.email, name: user.name })).toString('base64');
     console.log('User logged in:', email);
     res.json({ token });
@@ -105,15 +89,96 @@ app.get('/api/user/profile', async (req, res) => {
     const user = await getUserByEmail(decoded.email);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    // Streak Logic: Check if streak is broken
+    const todayStr = new Date().toISOString().split('T')[0];
+    const needsMoodCheck = user.lastMoodDate !== todayStr;
+    const lastStreakDate = user.lastStreakDate;
+    let currentStreak = user.currentStreak || 0;
+
+    // Calculate yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // If streak was not updated today AND not updated yesterday, it is broken (unless it's 0 already)
+    if (currentStreak > 0 && lastStreakDate !== todayStr && lastStreakDate !== yesterdayStr) {
+      console.log(`[Streak Fix] Resetting streak for ${user.email}. Last: ${lastStreakDate}, Yesterday: ${yesterdayStr}`);
+      currentStreak = 0;
+      // Update DB to reflect broken streak
+      await updateUser(decoded.email, { currentStreak: 0 });
+    }
+
+    // Log mood status to terminal for visibility
+    console.log(`[Mood Status] User: ${user.email}, Current Mood: ${user.currentMood || 'Not set'}, Needs Check: ${needsMoodCheck}`);
+
     // Return user profile without sensitive data
     res.json({
       email: user.email,
       name: user.name,
-      dailyHours: user.dailyHours || 4
+      dailyHours: user.dailyHours || 4,
+      currentStreak: currentStreak,
+      lastStreakDate: user.lastStreakDate || null,
+      streakHistory: user.streakHistory || [],
+      lastMoodDate: user.lastMoodDate || null,
+      currentMood: user.currentMood || null,
+      needsMoodCheck
     });
   } catch (error) {
     console.error('Profile fetch error:', error);
     res.status(500).json({ message: 'Failed to fetch profile' });
+  }
+});
+
+// POST /api/user/mood - Save user's daily mood
+app.post('/api/user/mood', async (req, res) => {
+  const decoded = verifyToken(req);
+  if (!decoded) return res.status(401).json({ message: 'Unauthorized' });
+
+  try {
+    const { mood } = req.body;
+
+    if (!mood) {
+      return res.status(400).json({ message: 'Mood is required' });
+    }
+
+    const user = await getUserByEmail(decoded.email);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Check if mood was already logged today
+    if (user.lastMoodDate === todayStr) {
+      return res.status(400).json({ message: 'Mood already logged today' });
+    }
+
+    // Update mood history
+    const moodHistory = user.moodHistory || [];
+    moodHistory.push({
+      date: todayStr,
+      mood: mood,
+      timestamp: new Date().toISOString()
+    });
+
+    // Update user with new mood data
+    await updateUser(decoded.email, {
+      lastMoodDate: todayStr,
+      currentMood: mood,
+      moodHistory
+    });
+
+    console.log(`Mood logged for ${decoded.email}: ${mood}`);
+
+    // Mood-Aware Adjustments: Adjust remaining tasks for today
+    await PlanningEngine.adjustTasksForMood(decoded.email, mood);
+
+    res.json({
+      message: 'Mood saved successfully',
+      mood,
+      date: todayStr
+    });
+  } catch (error) {
+    console.error('Save mood error:', error);
+    res.status(500).json({ message: 'Failed to save mood' });
   }
 });
 
@@ -197,10 +262,10 @@ app.patch('/api/tasks/:id/progress', async (req, res) => {
 });
 
 // Gemini Initialization
-const { GoogleGenAI } = require('@google/genai');
 const genAIKey = process.env.GEMINI_API_KEY || process.env.API_KEY || 'MISSING_KEY';
 console.log("Configured API Key:", genAIKey === 'MISSING_KEY' ? 'MISSING' : (genAIKey.substring(0, 4) + '...'));
-const genAI = new GoogleGenAI({ apiKey: genAIKey });
+const genAI = new GoogleGenerativeAI(genAIKey);
+// Direct Gemini integration for syllabus extraction - Make.com integration has been removed.
 
 async function generatePlanFromOnboarding(data, retryCount = 0) {
   const MAX_RETRIES = 2;
@@ -248,23 +313,29 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
 
     let parts = [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }];
 
-    if (data.documentData && data.mimeType) {
-      console.log("Attaching document context to prompt...");
-      parts[0].text += "\n\n[IMPORTANT] A document has been uploaded. Use the attached document to extract the syllabus, topics, and structure the plan precisely based on its content.";
-      parts.push({
-        inlineData: {
-          mimeType: data.mimeType,
-          data: data.documentData
+    if (data.syllabusFiles && Array.isArray(data.syllabusFiles) && data.syllabusFiles.length > 0) {
+      console.log(`Attaching ${data.syllabusFiles.length} syllabus files directly to Gemini for extraction and planning...`);
+      data.syllabusFiles.forEach(file => {
+        if (file.data && file.type) {
+          parts.push({
+            inlineData: {
+              data: file.data,
+              mimeType: file.type
+            }
+          });
         }
       });
+      parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives. Then, structure the study plan accurately based on this extracted material." });
     }
 
-    const result = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: [{ role: "user", parts: parts }],
-      config: {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: parts }]
     });
 
 
@@ -314,11 +385,19 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
     console.error(`Gemini API Error (attempt ${retryCount + 1}):`, e.message);
 
     // Retry logic for transient errors
-    if (retryCount < MAX_RETRIES && (e.message.includes('quota') || e.message.includes('rate limit') || e.message.includes('timeout'))) {
-      const waitTime = (retryCount + 1) * 2000; // 2s, 4s
-      console.log(`Retrying in ${waitTime}ms...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      return generatePlanFromOnboarding(data, retryCount + 1);
+    if (retryCount < MAX_RETRIES) {
+      // Check for 429 specifically
+      if (e.message.includes('429') || e.message.includes('Quota') || e.message.includes('limit')) {
+        console.log('Quota/Rate limit hit. Stopping retries to preserve quota.');
+        throw new Error('Daily AI Quota Exceeded. Please try again later or use a different API Key.');
+      }
+
+      if (e.message.includes('timeout') || e.message.includes('network')) {
+        const waitTime = (retryCount + 1) * 2000; // 2s, 4s
+        console.log(`Retrying in ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return generatePlanFromOnboarding(data, retryCount + 1);
+      }
     }
 
     // Log error details but don't crash
@@ -342,16 +421,24 @@ app.get('/api/study-plan/active', async (req, res) => {
     }
 
     const latestPlan = onboardingEntries[0].onboardingData;
-    const allTasks = await getTasks(decoded.email);
 
-    // Filter tasks somewhat loosely to avoid case-sensitivity issues
-    const validSubjects = [latestPlan.level, latestPlan.skill].filter(Boolean).map(s => s.toLowerCase());
+    // Get user's current mood for the replanner
+    const user = await getUserByEmail(decoded.email);
+    const currentMood = user ? user.currentMood : 'okay';
 
-    const planTasks = allTasks.filter(t => {
-      if (!t.subject) return false;
-      const taskSubject = t.subject.toLowerCase();
-      return validSubjects.some(s => taskSubject.includes(s) || s.includes(taskSubject));
-    });
+    // 1. Silent automatic replanning for missed days or mood shifts
+    await PlanningEngine.ensureOptimalPlan(decoded.email, currentMood);
+
+    // 2. Refresh tasks after potential redistribution
+    const planTasks = await (async () => {
+      const allTasks = await getTasks(decoded.email);
+      const validSubjects = [latestPlan.level, latestPlan.skill].filter(Boolean).map(s => s.toLowerCase());
+      return allTasks.filter(t => {
+        if (!t.subject) return false;
+        const taskSubject = t.subject.toLowerCase();
+        return validSubjects.some(s => taskSubject.includes(s) || s.includes(taskSubject));
+      });
+    })();
 
     console.log(`Active Plan: Found ${planTasks.length} tasks for user ${decoded.email}`);
     res.json({ plan: latestPlan, tasks: planTasks });
@@ -379,10 +466,13 @@ app.post('/api/study-plan/generate', async (req, res) => {
       throw new Error('Task generation returned empty array');
     }
 
-    console.log(`Generated ${generatedTasks.length} tasks, now persisting...`);
+    // 3. Apply Spaced Repetition (1-4-7 Rule) if time allows
+    const optimizedTasks = await PlanningEngine.applySpacedRepetition(generatedTasks, onboardingData.examDate);
 
-    // 3. Save generated tasks first
-    const savedTasks = await saveTasks(decoded.email, generatedTasks);
+    console.log(`Generated ${generatedTasks.length} tasks (Optimized to ${optimizedTasks.length}), now persisting...`);
+
+    // 4. Save generated tasks first
+    const savedTasks = await saveTasks(decoded.email, optimizedTasks);
 
     // 4. Only save onboarding data after tasks are successfully saved
     // 4. Only save onboarding data after tasks are successfully saved
@@ -433,9 +523,10 @@ RULES:
 - No emojis or overly casual language
 - No mentions of AI or automation`;
 
-    // Requirement: Use stable flash model gemini-1.5-flash
-    const result = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
+    // Requirement: Use stable flash model
+    // Note: gemini-1.5-flash is not found in this environment; using gemini-2.5-flash which is stable here.
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent({
       contents: [
         { role: "user", parts: [{ text: `${systemInstruction}\n\nStudent question: ${message}` }] }
       ]
@@ -489,8 +580,9 @@ app.post('/api/quiz/generate', async (req, res) => {
 Generate a conceptual and application-based quiz based ONLY on the topic "${topic}" in "${subject}".
 - Calm, tutor-like tone. No emojis.
 - Match difficulty to exam standards.
-- Include 3 MCQ and 1 short-answer diagnostic question.
+- Include 5 MCQ and 1 short-answer diagnostic question.
 - No answers should be shown immediately to the user.
+- MANDATORY: Every question MUST have an "explanation" field (minimum 2 sentences) explaining the concept and why the correctAnswer is right.
 - STRICTLY return a JSON array of objects with this structure:
   [
     {
@@ -498,7 +590,8 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
       "type": "mcq",
       "question": "Question text here",
       "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "Option B"
+      "correctAnswer": "Option B",
+      "explanation": "Briefly explain why this answer is correct."
     },
     ...
   ]
@@ -506,12 +599,14 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
 - For short answer, "options" can be empty or omitted.
 `;
 
-    const result = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
@@ -561,29 +656,33 @@ Questions: ${JSON.stringify(questions)}
 Responses: ${JSON.stringify(responses)}
 Proximity: ${proximity}
 
+MANDATORY: Calculate score honestly
 RULES:
-1. Identify Weak Subtopics: Where answers were incorrect or showed gaps.
-2. Identify Stable Subtopics: Where student was consistently correct.
-3. Supportive Feedback: No negative language. Treat mistakes as learning signals.
-4. Targeted Revision: Suggest short, specific revision tasks ONLY for weak subtopics for ${tomorrowISO}.
-5. Return JSON object with this EXACT structure:
+1. Calculate Score Honestly: The "score" field must be the EXACT number of correct answers based on the student's Responses. DO NOT inflate the score.
+2. Identify Weak Subtopics: Where answers were incorrect or showed gaps.
+3. Identify Stable Subtopics: Where student was consistently correct.
+4. Supportive Feedback: While being honest about the score, keep the language supportive and use mistakes as learning signals.
+5. Targeted Revision: Suggest short, specific revision tasks ONLY for weak subtopics for ${tomorrowISO}.
+6. Return JSON object with this EXACT structure:
 {
-  "score": number, // Number of correct answers
+  "score": number, // MUST match the actual number of correct answers
   "total": number, // Total number of questions
-  "insight": "string", // Encouraging feedback summary
+  "insight": "string", // Encouraging feedback summary appropriate for the score
   "weakSubtopics": ["string"],
   "stableSubtopics": ["string"],
   "suggestedRevisionTasks": [] // Optional array of tasks
 }
 
-TONE: supportive, calm, exam-focused. No emojis. No AI mentions.`;
+TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
 
-    const result = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
@@ -597,6 +696,62 @@ TONE: supportive, calm, exam-focused. No emojis. No AI mentions.`;
     }
 
     const evaluation = JSON.parse(jsonString);
+
+    // Streak Logic
+    console.log(`[Streak Debug] Score: ${evaluation.score}, Total: ${evaluation.total}, Threshold: ${evaluation.total / 2}`);
+    if (evaluation.score > (evaluation.total / 2)) {
+      const user = await getUserByEmail(decoded.email);
+      console.log(`[Streak Debug] User found: ${!!user}, LastStreak: ${user?.lastStreakDate}, Current: ${user?.currentStreak}`);
+
+      if (user) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const lastStreakDate = user.lastStreakDate; // YYYY-MM-DD
+        let currentStreak = user.currentStreak || 0;
+
+        if (lastStreakDate === todayStr) {
+          console.log('[Streak Debug] Already maintained today');
+        } else {
+          // Calculate yesterday
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          console.log(`[Streak Debug] Yesterday was: ${yesterdayStr}`);
+
+          if (lastStreakDate === yesterdayStr) {
+            currentStreak += 1;
+          } else {
+            currentStreak = 1;
+          }
+          console.log(`[Streak Debug] New streak will be: ${currentStreak}`);
+
+          const streakHistory = user.streakHistory || [];
+          if (!streakHistory.includes(todayStr)) {
+            streakHistory.push(todayStr);
+          }
+
+          await updateUser(decoded.email, {
+            currentStreak,
+            lastStreakDate: todayStr,
+            streakHistory
+          });
+          console.log('[Streak Debug] User updated in DB');
+
+          // Attach streak info to response for frontend celebration
+          evaluation.streakUpdate = {
+            newStreak: currentStreak,
+            message: "Streak maintained!"
+          };
+        }
+      }
+    } else {
+      console.log('[Streak Debug] Score not high enough for streak');
+    }
+
+    // Performance-Based Replanning: Mark topic as weak if score is low (< 60%)
+    if (evaluation.score < (evaluation.total * 0.6)) {
+      await PlanningEngine.markTopicAsWeak(decoded.email, topic);
+    }
+
     res.json(evaluation);
   } catch (error) {
     console.error('Quiz evaluation error:', error);
@@ -611,31 +766,46 @@ app.post('/api/resources', async (req, res) => {
 
   try {
     const { topic, subject } = req.body;
-    const systemInstruction = `Find 3 high-quality educational resources for the topic "${topic}" in "${subject}". Provide YouTube links or reputable educational websites. Return as JSON array of objects with title, url, type, description.`;
 
-    const result = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
-        responseMimeType: "application/json",
-      }
-    });
+    // User requested "Proper YT videos"
+    // topic is now being passed as subtopic from the frontend for better precision
+    const searchQuery = `${topic} ${subject} tutorial`;
+    console.log(`Searching YouTube for: ${searchQuery}`);
 
-    let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
+    try {
+      const yts = require('yt-search');
+      const searchResults = await yts(searchQuery);
 
-    // Clean JSON string
-    let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const firstBracket = jsonString.indexOf('[');
-    const lastBracket = jsonString.lastIndexOf(']');
-    if (firstBracket !== -1 && lastBracket !== -1) {
-      jsonString = jsonString.substring(firstBracket, lastBracket + 1);
+      const resources = searchResults.videos.slice(0, 6).map(video => ({
+        title: video.title,
+        url: video.url, // Direct Watch URL: https://youtube.com/watch?v=...
+        type: 'video',
+        description: video.description || `Watch ${video.title} on YouTube.`,
+        thumbnail: video.thumbnail,
+        duration: video.timestamp,
+        views: `${video.views} views`
+      }));
+
+      console.log(`Found ${resources.length} videos`);
+      res.json({ resources });
+    } catch (searchError) {
+      console.error('YouTube Search Error:', searchError);
+      // Fallback only if library fails completely
+      const encodedTopic = encodeURIComponent(`${topic} ${subject}`);
+      res.json({
+        resources: [
+          {
+            title: `YouTube Search: ${topic}`,
+            url: `https://www.youtube.com/results?search_query=${encodedTopic}+tutorial`,
+            type: 'video',
+            description: `Search results for ${topic} on YouTube.`,
+          }
+        ]
+      });
     }
-
-    const resources = JSON.parse(jsonString);
-    res.json({ resources });
   } catch (error) {
     console.error('Resources error:', error);
-    res.status(500).json({ message: 'Failed to fetch resources', error: error.message });
+    res.json({ resources: [] });
   }
 });
 
@@ -657,7 +827,13 @@ app.post('/api/learning/content', async (req, res) => {
     }
 
     // Branch for Revision sessions
-    if (sessionType === 'Revision') {
+    const isRevision = sessionType && (
+      sessionType.includes('Revision') ||
+      sessionType.includes('Practice') ||
+      sessionType.includes('Focus')
+    );
+
+    if (isRevision) {
       try {
         const content = await generateRevisionWithAzureOpenAI(subject, topic, level, examDate, learningStyle, proximity);
         return res.json(content);
@@ -674,12 +850,14 @@ STRICT RULES:
 - TASK: Break "${topic}" in "${subject}" into logical subtopics and provide content for each. 
 - Return JSON object with "subparts" array.`;
 
-    const result = await genAI.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
-      config: {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
       }
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
     });
 
     let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));

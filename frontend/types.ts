@@ -1,5 +1,5 @@
 
-export type Screen = 'landing' | 'auth' | 'onboarding' | 'dashboard' | 'quiz' | 'insights' | 'calendar' | 'chat' | 'resources' | 'user-profile' | 'learning' | 'exam-selection';
+export type Screen = 'landing' | 'auth' | 'onboarding' | 'dashboard' | 'quiz' | 'insights' | 'calendar' | 'chat' | 'resources' | 'user-profile' | 'learning' | 'exam-selection' | 'mood-check';
 
 export interface OnboardingData {
   mode: 'exam' | 'skill';
@@ -11,8 +11,7 @@ export interface OnboardingData {
   learningStyle?: 'Flashcards' | 'Analogies' | 'Practice' | 'Mixed';
   skill?: string;
   skillDuration?: string;
-  documentData?: string; // Base64 encoded file content
-  mimeType?: string;
+  syllabusFiles?: { name: string, data: string, type: string }[];
 }
 
 export interface StudyTask {
@@ -35,6 +34,7 @@ export interface QuizQuestion {
   question: string;
   options?: string[];
   correctAnswer: string;
+  explanation: string;
 }
 
 export interface QuizResult {
@@ -64,4 +64,16 @@ export interface StudyResource {
   url: string;
   type: 'video' | 'article' | 'website';
   description: string;
+  thumbnail?: string;
+  duration?: string;
+  views?: string;
+}
+
+export interface UserProfile {
+  email: string;
+  name: string;
+  dailyHours: number;
+  currentStreak?: number;
+  lastStreakDate?: string;
+  streakHistory?: string[];
 }
