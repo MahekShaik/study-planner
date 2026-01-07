@@ -40,6 +40,14 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
     return tasks.filter(t => t.status !== 'completed');
   }, [tasks]);
 
+  const isExamOver = useMemo(() => {
+    if (onboardingData?.mode === 'exam' && onboardingData?.examDate) {
+      const today = new Date().toISOString().split('T')[0];
+      return onboardingData.examDate < today;
+    }
+    return false;
+  }, [onboardingData]);
+
   const selectedDateObj = new Date(selectedDate);
   const formattedSelectedDate = selectedDateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
   const dayNamePrefix = selectedDate === new Date().toISOString().split('T')[0] ? "Today" : selectedDateObj.toLocaleDateString('en-US', { weekday: 'long' });
@@ -209,9 +217,17 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
               ))}
               {activeTasks.length === 0 && (
                 <div className="py-24 text-center border-2 border-dashed border-slate-100 rounded-3xl bg-white/50 backdrop-blur-sm">
-                  <span className="text-5xl mb-6 block opacity-20">🍃</span>
-                  <p className="text-slate-400 font-medium italic">Your garden of tasks is empty for this day.</p>
-                  <p className="text-slate-300 text-xs mt-2">Adjust your calendar or take a rest.</p>
+                  <span className="text-5xl mb-6 block opacity-20">{isExamOver ? '🎓' : '🍃'}</span>
+                  <p className="text-slate-400 font-medium italic">
+                    {isExamOver
+                      ? "Congratulations! Your exam period has concluded."
+                      : "Your garden of tasks is empty for this day."}
+                  </p>
+                  <p className="text-slate-300 text-xs mt-2">
+                    {isExamOver
+                      ? "Take a well-deserved break or start a new journey."
+                      : "Adjust your calendar or take a rest."}
+                  </p>
                 </div>
               )}
             </div>

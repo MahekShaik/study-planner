@@ -1,7 +1,7 @@
 {
-  "name": "serenestudy-backend",
+  "name": "adapta-backend",
   "version": "1.0.0",
-  "description": "Minimal backend API for SereneStudy onboarding",
+  "description": "Minimal backend API for Adapta onboarding",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

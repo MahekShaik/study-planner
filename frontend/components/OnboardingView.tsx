@@ -128,7 +128,9 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-[var(--bg-main)]">
         <div className="w-12 h-12 border-4 border-[var(--sage-light)] border-t-[var(--sage-primary)] rounded-full animate-spin mb-8"></div>
         <h2 className="text-3xl font-bold text-[var(--primary)] tracking-tight mb-3">Generating your plan...</h2>
-        <p className="text-slate-400 font-light max-w-sm mx-auto leading-relaxed">Gemini is analyzing your goals to minimize your cognitive load.</p>
+        <p className="text-slate-400 font-light max-w-sm mx-auto leading-relaxed">
+          <strong>Transparency Note:</strong> Adapta AI monitors your quiz accuracy, focus time, and subjective feedback to recalibrate your plan. Your path is uniquely tailored to your pace.
+        </p>
       </div>
     );
   }
@@ -155,7 +157,7 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
   return (
     <div className="max-w-xl mx-auto py-16 px-6 animate-fade-in bg-[var(--bg-main)]">
       <header className="mb-14 text-center">
-        <div className="w-20 h-20 bg-[var(--primary)] rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-white text-4xl font-bold shadow-xl">S</div>
+        <div className="w-20 h-20 bg-[var(--primary)] rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-white text-4xl font-bold shadow-xl">A</div>
         <h1 className="text-4xl font-bold text-[var(--primary)] mb-2 tracking-tight">Focus your journey</h1>
         <p className="text-slate-400 font-light mb-6 text-lg">Choose how you'd like to prepare today.</p>
         <button

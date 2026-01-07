@@ -18,7 +18,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ tasks, onboardingData, onBack
     const userName = onboardingData ? "Learner" : "Student"; // Replace with real name if available
 
     return (
-        <div className="max-w-4xl mx-auto py-12 px-6 animate-fade-in min-h-screen">
+        <div className="max-w-4xl mx-auto py-12 pt-32 px-6 animate-fade-in min-h-screen">
             <div className="flex items-center gap-6 mb-12">
                 <button onClick={onBack} className="p-3 hover:bg-slate-100 rounded-2xl text-slate-500 transition-all active:scale-95 border border-slate-100">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -117,7 +117,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ tasks, onboardingData, onBack
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
-                    Sign Out of SereneStudy
+                    Sign Out of Adapta
                 </button>
             </div>
         </div>

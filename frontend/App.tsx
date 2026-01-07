@@ -24,8 +24,8 @@ const App: React.FC = () => {
     if (saved === 'undefined' || saved === 'null' || !saved) return null;
     return saved;
   });
-  // Default to 'landing' if not authenticated
-  const [currentScreen, setCurrentScreen] = useState<Screen>(token ? 'onboarding' : 'landing');
+  // Initial state for currentScreen should be 'loading' if token exists to avoid onboarding flicker
+  const [currentScreen, setCurrentScreen] = useState<Screen>(token ? 'loading' : 'landing');
   const [tasks, setTasks] = useState<StudyTask[]>([]);
   const [allPlans, setAllPlans] = useState<OnboardingData[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<OnboardingData | null>(null);
@@ -45,18 +45,19 @@ const App: React.FC = () => {
 
   async function hydrateSession(authToken: string) {
     try {
+      console.log('[Navigation Debug] Hydrating session...');
+      let targetScreen: Screen = 'onboarding';
+
       // Fetch user profile
       const profileResponse = await fetch('/api/user/profile', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
-      let shouldShowMoodCheck = false;
       if (profileResponse.ok) {
         const profile = await profileResponse.json();
         setUserProfile(profile);
         if (profile.needsMoodCheck) {
-          shouldShowMoodCheck = true;
-          setCurrentScreen('mood-check');
+          targetScreen = 'mood-check';
         }
       }
 
@@ -78,15 +79,24 @@ const App: React.FC = () => {
         setTasks(allTasks || []);
 
         if (plans.length > 0) {
-          // Default to the most recent plan (first in list usually, or just 0)
+          // Default to the most recent plan
           setSelectedPlan(plans[0]);
 
-          if (!shouldShowMoodCheck) {
-            setCurrentScreen('dashboard');
+          // Only switch to dashboard if mood check isn't required
+          if (targetScreen !== 'mood-check') {
+            targetScreen = 'dashboard';
           }
         } else {
-          setCurrentScreen('onboarding');
+          // If no plans, ensure we don't accidentally skip mood check if requested
+          // though typically mood check is for active study days.
+          // Keep it as 'mood-check' if profile said so, else 'onboarding'
+          if (targetScreen !== 'mood-check') {
+            targetScreen = 'onboarding';
+          }
         }
+
+        console.log(`[Navigation Debug] Session hydrated. Transitioning to: ${targetScreen}`);
+        setCurrentScreen(targetScreen);
       } else if (plansResponse.status === 401 || tasksResponse.status === 401) {
         handleExitSession();
       }
@@ -221,8 +231,11 @@ const App: React.FC = () => {
 
   const handleQuizFinish = useCallback(async (result: QuizResult) => {
     if (activeTask) {
+      // REQUIREMENT: Only mark complete if score is > 50%
+      const isPassed = result.score > (result.total / 2);
+
       await handleUpdateProgress(activeTask.id, {
-        status: 'completed',
+        status: isPassed ? 'completed' : 'pending',
         quizStatus: 'completed',
         completedSubtopics: activeTask.completedSubtopics
       });
@@ -316,6 +329,13 @@ const App: React.FC = () => {
         const activePlanKeyword = selectedPlan?.mode === 'exam' ? selectedPlan.level : selectedPlan?.skill;
         const filteredTasks = tasks.filter(t => {
           if (!activePlanKeyword) return true; // Show all if no plan selected (fallback)
+
+          // Check if exam is over for this plan
+          if (selectedPlan?.mode === 'exam' && selectedPlan?.examDate) {
+            const today = new Date().toISOString().split('T')[0];
+            if (selectedPlan.examDate < today) return false;
+          }
+
           const taskSubject = (t.subject || '').toLowerCase();
           const planSubject = activePlanKeyword.toLowerCase();
           return taskSubject.includes(planSubject) || planSubject.includes(taskSubject);
@@ -388,7 +408,14 @@ const App: React.FC = () => {
       case 'user-profile':
         return <UserProfile tasks={tasks} onboardingData={selectedPlan} onBack={() => setCurrentScreen('dashboard')} onLogout={handleExitSession} onStartNewPlan={handleStartNewExam} />;
       case 'auth':
-        return <OnboardingView onComplete={handleOnboardingComplete} onLogout={handleExitSession} initialData={selectedPlan} onExamModeRequest={handleExamModeRequest} userDailyHours={userProfile?.dailyHours || 4} />;
+        return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+      case 'loading':
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen">
+            <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+            <p className="text-slate-500 font-medium">Restoring your session...</p>
+          </div>
+        );
       default:
         return (
           <StudyDashboard
@@ -528,8 +555,8 @@ const App: React.FC = () => {
       {!isUtilityScreen && (
         <footer className="py-8 flex justify-center opacity-40 pointer-events-none">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-white font-bold">S</div>
-            <span className="text-xs font-bold tracking-[0.2em] uppercase text-slate-900">SereneStudy AI</span>
+            <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-white font-bold">A</div>
+            <span className="text-xs font-bold tracking-[0.2em] uppercase text-slate-900">Adapta AI</span>
           </div>
         </footer>
       )}

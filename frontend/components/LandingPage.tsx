@@ -13,8 +13,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
             <section className="relative h-screen flex flex-col">
                 <nav className="absolute top-0 left-0 right-0 z-50 flex justify-between items-center px-8 py-6 max-w-7xl mx-auto w-full">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-xs text-white font-bold border border-white/30">S</div>
-                        <span className="text-sm font-bold tracking-[0.2em] uppercase text-white shadow-sm">SereneStudy AI</span>
+                        <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-xs text-white font-bold border border-white/30">A</div>
+                        <span className="text-sm font-bold tracking-[0.2em] uppercase text-white shadow-sm">Adapta AI</span>
                     </div>
                     <button
                         onClick={onLogin}
@@ -45,7 +45,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
             <section className="py-24 px-6 bg-slate-50">
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-20">
-                        <h2 className="text-xs font-bold text-emerald-600 uppercase tracking-[0.2em] mb-3">Why SereneStudy?</h2>
+                        <h2 className="text-xs font-bold text-emerald-600 uppercase tracking-[0.2em] mb-3">Why Adapta?</h2>
                         <h3 className="text-3xl md:text-4xl font-bold text-[#251f47]">Precision Learning, Zero Burnout.</h3>
                     </div>
 
@@ -100,7 +100,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
                 <div className="max-w-5xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl font-bold text-[#251f47] mb-4">Meet the Team</h2>
-                        <p className="text-slate-400 font-light">The minds behind SereneStudy AI.</p>
+                        <p className="text-slate-400 font-light">The minds behind Adapta AI.</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -126,10 +126,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
 
             <footer className="py-12 bg-[#251f47] text-white/40 text-center border-t border-white/10">
                 <div className="flex items-center justify-center gap-2 mb-4 opacity-70">
-                    <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white font-bold">S</div>
-                    <span className="text-xs font-bold tracking-[0.2em] uppercase text-white">SereneStudy AI</span>
+                    <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white font-bold">A</div>
+                    <span className="text-xs font-bold tracking-[0.2em] uppercase text-white">Adapta AI</span>
                 </div>
-                <p className="text-[10px]">© 2025 SereneStudy. All rights reserved.</p>
+                <p className="text-[10px]">© 2026 Adapta. All rights reserved.</p>
             </footer>
         </div>
     );

@@ -17,7 +17,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, streakHistory =
   });
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-6 animate-fade-in">
+    <div className="max-w-2xl mx-auto py-12 pt-32 px-6 animate-fade-in">
       <header className="mb-12">
         <h2 className="text-[#8FB38F] text-[11px] font-bold uppercase tracking-[0.2em] mb-2">AI Analysis & Habits</h2>
         <h1 className="text-3xl font-bold text-[#2D3E35] tracking-tight">Insights</h1>
@@ -105,7 +105,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, streakHistory =
           <span className="text-[10px] font-bold uppercase tracking-widest text-[#8FB38F]">Gemini Engine</span>
         </div>
         <p className="text-[14px] leading-relaxed font-light text-slate-200">
-          <strong>Transparency Note:</strong> SereneStudy AI monitors your quiz accuracy, focus time, and subjective feedback to recalibrate your plan. Your path is uniquely tailored to your pace.
+          <strong>Transparency Note:</strong> Adapta AI monitors your quiz accuracy, focus time, and subjective feedback to recalibrate your plan. Your path is uniquely tailored to your pace.
         </p>
       </div>
     </div>

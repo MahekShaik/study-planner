@@ -47,7 +47,7 @@ const memoryStore = {
     users: [
         {
             id: 'demo-user-id',
-            email: 'demo@serenestudy.ai',
+            email: 'demo@adapta.ai',
             name: 'Demo User',
             // Hash for 'password123'
             hashedPassword: '$2b$10$Kz6u8MSmXOfDrYzOQcbZSeJp5PNd0JbCXZYY4P1ez5lK1oJXxXELfu',

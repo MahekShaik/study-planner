@@ -53,7 +53,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ tasks, examDate, onStartTas
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-12 px-6 animate-fade-in">
+    <div className="max-w-4xl mx-auto py-12 pt-32 px-6 animate-fade-in">
       <header className="mb-10 text-center">
         <h1 className="text-3xl font-light text-slate-800 mb-2">Schedule</h1>
         <p className="text-slate-500">Browse your personalized learning journey.</p>

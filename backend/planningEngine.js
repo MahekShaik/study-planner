@@ -1,8 +1,5 @@
-const { getTasks, saveTasks, getUserByEmail, getOnboarding, deletePendingTasks } = require('./db');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const genAIKey = process.env.GEMINI_API_KEY || process.env.API_KEY || 'MISSING_KEY';
-const genAI = new GoogleGenerativeAI(genAIKey);
+const { getTasks, saveTasks, getUserByEmail, getOnboarding, deletePendingTasks, updateOnboarding } = require('./db');
+const { callGeminiWithRetry, parseGeminiJson } = require('./geminiUtils');
 
 /**
  * Intelligent Planning Engine (Gemini-Powered)
@@ -16,7 +13,6 @@ class PlanningEngine {
      * Strict Rules: Runs only once per day per plan to maintain stability.
      */
     static async ensureOptimalPlan(userEmail, currentMood = 'okay') {
-        const { getOnboarding, updateOnboarding, deletePendingTasks, saveTasks, getUserByEmail, getTasks } = require('./db');
         try {
             const todayStr = new Date().toISOString().split('T')[0];
             const user = await getUserByEmail(userEmail);
@@ -64,7 +60,6 @@ class PlanningEngine {
                     'stressed': 'Focus on Comfort Revision and very easy tasks to build confidence.'
                 };
 
-                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
                 const prompt = `You are an agentic study planner. Your goal is to REPLAN a student's schedule for ONE specific goal: "${planSubject}".
                 
                 CONTEXT:
@@ -90,10 +85,13 @@ class PlanningEngine {
                 Format: [{"subject": "${planSubject}", "topic": "Specific Topic Name", "subtopic": "Detailed Subtopic", "duration": "...", "date": "YYYY-MM-DD", "sessionType": "...", "aiExplanation": "...", "status": "pending"}]`;
 
                 try {
-                    const result = await model.generateContent(prompt);
-                    const responseTxt = result.response.text();
-                    const cleanedJson = responseTxt.replace(/```json|```/g, '').trim();
-                    const newTasks = JSON.parse(cleanedJson);
+                    const text = await callGeminiWithRetry({
+                        contents: [{ role: "user", parts: [{ text: prompt }] }],
+                        generationConfig: { responseMimeType: "application/json" },
+                        source: `PlanningEngine (${planSubject})`
+                    });
+
+                    const newTasks = parseGeminiJson(text);
 
                     if (Array.isArray(newTasks) && newTasks.length > 0) {
                         // 4. Persistence
@@ -110,11 +108,8 @@ class PlanningEngine {
                         console.log(`[PlanningEngine] Replanned ${newTasks.length} tasks for ${planSubject}.`);
                     }
                 } catch (err) {
-                    if (err.message && (err.message.includes('429') || err.message.includes('Quota') || err.message.includes('limit'))) {
-                        console.warn(`[PlanningEngine] Quota exceeded while replanning ${planSubject}. Skipping for now.`);
-                        return { redistributed: totalReplanned > 0, count: totalReplanned, warning: 'Quota Exceeded' };
-                    }
-                    console.error(`[PlanningEngine] Error replanning for ${planSubject}:`, err);
+                    console.error(`[PlanningEngine] AI Error for ${planSubject}:`, err.message);
+                    // Continue to next plan instead of failing entirely
                 }
             }
 

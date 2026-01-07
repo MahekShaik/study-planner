@@ -101,7 +101,7 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
                         <Brain className="w-12 h-12 text-emerald-400" />
                     </div>
                     <h1 className="text-5xl font-bold mb-6 leading-tight tracking-tight">
-                        Unlock Your Potential with <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">SereneStudy AI</span>
+                        Unlock Your Potential with <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">Adapta AI</span>
                     </h1>
                     <p className="text-lg text-slate-300 leading-relaxed mb-8">
                         Adaptive study plans, intelligent scheduling, and stress-free learning designed just for you.

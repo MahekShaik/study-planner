@@ -1,5 +1,5 @@
 
-export type Screen = 'landing' | 'auth' | 'onboarding' | 'dashboard' | 'quiz' | 'insights' | 'calendar' | 'chat' | 'resources' | 'user-profile' | 'learning' | 'exam-selection' | 'mood-check';
+export type Screen = 'landing' | 'auth' | 'onboarding' | 'dashboard' | 'quiz' | 'insights' | 'calendar' | 'chat' | 'resources' | 'user-profile' | 'learning' | 'exam-selection' | 'mood-check' | 'loading';
 
 export interface OnboardingData {
   mode: 'exam' | 'skill';

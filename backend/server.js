@@ -15,6 +15,7 @@ const {
 } = require('./db');
 const PlanningEngine = require('./planningEngine');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { callGeminiWithRetry, parseGeminiJson } = require('./geminiUtils');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -267,8 +268,7 @@ console.log("Configured API Key:", genAIKey === 'MISSING_KEY' ? 'MISSING' : (gen
 const genAI = new GoogleGenerativeAI(genAIKey);
 // Direct Gemini integration for syllabus extraction - Make.com integration has been removed.
 
-async function generatePlanFromOnboarding(data, retryCount = 0) {
-  const MAX_RETRIES = 2;
+async function generatePlanFromOnboarding(data) {
   const systemPrompt = `You are a study planning intelligence for a student exam preparation application.
 Your task is to transform exam preparation inputs into a structured daily study plan.
 
@@ -309,15 +309,12 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
        Plan starting from today.`;
 
   try {
-    console.log(`Calling Gemini API (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`);
-
-    let parts = [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }];
+    let contents = [{ role: "user", parts: [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }] }];
 
     if (data.syllabusFiles && Array.isArray(data.syllabusFiles) && data.syllabusFiles.length > 0) {
-      console.log(`Attaching ${data.syllabusFiles.length} syllabus files directly to Gemini for extraction and planning...`);
       data.syllabusFiles.forEach(file => {
         if (file.data && file.type) {
-          parts.push({
+          contents[0].parts.push({
             inlineData: {
               data: file.data,
               mimeType: file.type
@@ -325,44 +322,16 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
           });
         }
       });
-      parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives. Then, structure the study plan accurately based on this extracted material." });
+      contents[0].parts.push({ text: "\n[IMPORTANT] Use the uploaded syllabus documents above to extract specific topics, modules, and learning objectives. Then, structure the study plan accurately based on this extracted material." });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: parts }]
+    const text = await callGeminiWithRetry({
+      contents,
+      generationConfig: { responseMimeType: "application/json" },
+      source: 'Plan Generation'
     });
 
-
-    // Parse the response - handle different response structures
-    let text;
-    if (typeof result.text === 'function') {
-      text = result.text();
-    } else if (result.text) {
-      text = result.text;
-    } else if (result.response && typeof result.response.text === 'function') {
-      text = result.response.text();
-    } else if (result.response && result.response.text) {
-      text = result.response.text;
-    } else {
-      text = JSON.stringify(result);
-    }
-    console.log("Raw Gemini Response:", text.substring(0, 500) + "...");
-
-    let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const firstBracket = jsonString.indexOf('[');
-    const lastBracket = jsonString.lastIndexOf(']');
-
-    if (firstBracket !== -1 && lastBracket !== -1) {
-      jsonString = jsonString.substring(firstBracket, lastBracket + 1);
-    }
-
-    const generatedTasks = JSON.parse(jsonString);
+    const generatedTasks = parseGeminiJson(text);
 
     // Validate generated tasks
     if (!Array.isArray(generatedTasks) || generatedTasks.length === 0) {
@@ -382,29 +351,6 @@ DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the 
     console.log(`Successfully generated ${generatedTasks.length} tasks`);
     return generatedTasks;
   } catch (e) {
-    console.error(`Gemini API Error (attempt ${retryCount + 1}):`, e.message);
-
-    // Retry logic for transient errors
-    if (retryCount < MAX_RETRIES) {
-      // Check for 429 specifically
-      if (e.message.includes('429') || e.message.includes('Quota') || e.message.includes('limit')) {
-        console.log('Quota/Rate limit hit. Stopping retries to preserve quota.');
-        throw new Error('Daily AI Quota Exceeded. Please try again later or use a different API Key.');
-      }
-
-      if (e.message.includes('timeout') || e.message.includes('network')) {
-        const waitTime = (retryCount + 1) * 2000; // 2s, 4s
-        console.log(`Retrying in ${waitTime}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        return generatePlanFromOnboarding(data, retryCount + 1);
-      }
-    }
-
-    // Log error details but don't crash
-    const fs = require('fs');
-    const errorLog = `[${new Date().toISOString()}] Gemini API Error:\n${e.toString()}\n${e.stack || ''}\n\n`;
-    fs.appendFileSync('server_error.log', errorLog);
-
     throw new Error(`Failed to generate study plan: ${e.message}`);
   }
 }
@@ -421,6 +367,15 @@ app.get('/api/study-plan/active', async (req, res) => {
     }
 
     const latestPlan = onboardingEntries[0].onboardingData;
+
+    // Check if exam is over
+    if (latestPlan.mode === 'exam' && latestPlan.examDate) {
+      const today = new Date().toISOString().split('T')[0];
+      if (latestPlan.examDate < today) {
+        console.log(`[Exam Check] Exam for ${decoded.email} was on ${latestPlan.examDate}, which is in the past. Returning empty plan.`);
+        return res.json({ plan: null, tasks: [] });
+      }
+    }
 
     // Get user's current mood for the replanner
     const user = await getUserByEmail(decoded.email);
@@ -509,9 +464,7 @@ const handleChatRequest = async (req, res) => {
       return res.status(400).json({ message: 'Message is required' });
     }
 
-    console.log(`[${new Date().toISOString()}] Chat request from ${decoded.email}: ${message.substring(0, 50)}...`);
-
-    const systemInstruction = `You are a supportive, calm study tutor for SereneStudy. 
+    const systemInstruction = `You are a supportive, calm study tutor for Adapta.
 A student is feeling stuck on a topic and needs help understanding concepts.
 
 RULES:
@@ -523,42 +476,13 @@ RULES:
 - No emojis or overly casual language
 - No mentions of AI or automation`;
 
-    // Requirement: Use stable flash model
-    // Note: gemini-1.5-flash is not found in this environment; using gemini-2.5-flash which is stable here.
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent({
-      contents: [
-        { role: "user", parts: [{ text: `${systemInstruction}\n\nStudent question: ${message}` }] }
-      ]
+    const text = await callGeminiWithRetry({
+      contents: [{ role: "user", parts: [{ text: `${systemInstruction}\n\nStudent question: ${message}` }] }],
+      source: 'Chat Request'
     });
 
-    // Parse the response
-    let text;
-    if (typeof result.text === 'function') {
-      text = result.text();
-    } else if (result.text) {
-      text = result.text;
-    } else if (result.response && typeof result.response.text === 'function') {
-      text = result.response.text();
-    } else if (result.response && result.response.text) {
-      text = result.response.text;
-    } else {
-      throw new Error('Unable to extract text from Gemini response');
-    }
-
-    console.log(`[${new Date().toISOString()}] Chat response generated successfully (${text.length} chars)`);
     res.json({ response: text });
-
   } catch (error) {
-    // Requirement: Clear error logging for Gemini failures
-    console.error(`[${new Date().toISOString()}] Chat API Error:`, error.message);
-
-    // Log error details to file
-    const fs = require('fs');
-    const errorLog = `[${new Date().toISOString()}] Chat API Error:\n${error.toString()}\n${error.stack || ''}\n\n`;
-    fs.appendFileSync('server_error.log', errorLog);
-
-    // Requirement: Return a proper JSON error response instead of crashing
     res.status(500).json({
       message: 'Failed to generate explanation',
       error: error.message
@@ -576,7 +500,7 @@ app.post('/api/quiz/generate', async (req, res) => {
 
   try {
     const { subject, topic } = req.body;
-    const systemInstruction = `You are a learning assistant for SereneStudy. 
+    const systemInstruction = `You are a learning assistant for Adapta.
 Generate a conceptual and application-based quiz based ONLY on the topic "${topic}" in "${subject}".
 - Calm, tutor-like tone. No emojis.
 - Match difficulty to exam standards.
@@ -599,27 +523,13 @@ Generate a conceptual and application-based quiz based ONLY on the topic "${topi
 - For short answer, "options" can be empty or omitted.
 `;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
+    const text = await callGeminiWithRetry({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
+      generationConfig: { responseMimeType: "application/json" },
+      source: 'Quiz Generation'
     });
 
-    let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
-
-    // Clean JSON string
-    let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const firstBracket = jsonString.indexOf('[');
-    const lastBracket = jsonString.lastIndexOf(']');
-    if (firstBracket !== -1 && lastBracket !== -1) {
-      jsonString = jsonString.substring(firstBracket, lastBracket + 1);
-    }
-
-    const quiz = JSON.parse(jsonString);
+    const quiz = parseGeminiJson(text);
     res.json({ quiz });
   } catch (error) {
     console.error('Quiz generation error:', error);
@@ -648,7 +558,7 @@ app.post('/api/quiz/evaluate', async (req, res) => {
     tomorrow.setDate(today.getDate() + 1);
     const tomorrowISO = tomorrow.toISOString().split('T')[0];
 
-    const systemInstruction = `You are a learning evaluation manager for SereneStudy.
+    const systemInstruction = `You are a learning evaluation manager for Adapta.
 EVALUATE this quiz attempt for "${topic}" in "${subject}".
 
 INPUT:
@@ -675,27 +585,13 @@ RULES:
 
 TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
+    const text = await callGeminiWithRetry({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
+      generationConfig: { responseMimeType: "application/json" },
+      source: 'Quiz Evaluation'
     });
 
-    let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
-
-    // Clean JSON string
-    let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const firstBrace = jsonString.indexOf('{');
-    const lastBrace = jsonString.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-    }
-
-    const evaluation = JSON.parse(jsonString);
+    const evaluation = parseGeminiJson(text);
 
     // Streak Logic
     console.log(`[Streak Debug] Score: ${evaluation.score}, Total: ${evaluation.total}, Threshold: ${evaluation.total / 2}`);
@@ -747,8 +643,8 @@ TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
       console.log('[Streak Debug] Score not high enough for streak');
     }
 
-    // Performance-Based Replanning: Mark topic as weak if score is low (< 60%)
-    if (evaluation.score < (evaluation.total * 0.6)) {
+    // Performance-Based Replanning: Mark topic as weak if score is low (<= 50%)
+    if (evaluation.score <= (evaluation.total / 2)) {
       await PlanningEngine.markTopicAsWeak(decoded.email, topic);
     }
 
@@ -778,7 +674,7 @@ app.post('/api/resources', async (req, res) => {
 
       const resources = searchResults.videos.slice(0, 6).map(video => ({
         title: video.title,
-        url: video.url, // Direct Watch URL: https://youtube.com/watch?v=...
+        url: video.url, // Direct Watch URL: https://youtube.com/watch/v=...
         type: 'video',
         description: video.description || `Watch ${video.title} on YouTube.`,
         thumbnail: video.thumbnail,
@@ -843,34 +739,20 @@ app.post('/api/learning/content', async (req, res) => {
       }
     }
 
-    let systemInstruction = `You are a personalized learning assistant for SereneStudy. Help students study for exams.
+    let systemInstruction = `You are a personalized learning assistant for Adapta. Help students study for exams.
 STRICT RULES:
 - Calm, tutor-like tone. No emojis.
 - Proximity: ${proximity}. Level: ${level}. Learning Style: ${learningStyle}.
 - TASK: Break "${topic}" in "${subject}" into logical subtopics and provide content for each. 
 - Return JSON object with "subparts" array.`;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: systemInstruction }] }]
+    const text = await callGeminiWithRetry({
+      contents: [{ role: "user", parts: [{ text: systemInstruction }] }],
+      generationConfig: { responseMimeType: "application/json" },
+      source: 'Learning Content Generation'
     });
 
-    let text = result.text ? (typeof result.text === 'function' ? result.text() : result.text) : (result.response ? result.response.text() : JSON.stringify(result));
-
-    // Clean JSON string
-    let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const firstBrace = jsonString.indexOf('{');
-    const lastBrace = jsonString.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-    }
-
-    const content = JSON.parse(jsonString);
+    const content = parseGeminiJson(text);
     res.json(content);
   } catch (error) {
     console.error('Learning content error:', error.message);
@@ -888,7 +770,7 @@ async function generateRevisionWithAzureOpenAI(subject, topic, level, examDate, 
     throw new Error('Azure OpenAI credentials missing. Please configure AZURE_OPENAI_KEY and ENDPOINT in .env');
   }
 
-  const systemPrompt = `You are an exam revision assistant for SereneStudy. 
+  const systemPrompt = `You are an exam revision assistant for Adapta.
 Your job is to generate concise, high-yield revision content for "${topic}" in "${subject}".
 
 RULES:
@@ -945,7 +827,7 @@ Return JSON object with "subparts" array [ { "title": "...", "content": "..." } 
 initializeDatabase()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`SereneStudy backend running on http://localhost:${PORT}`);
+      console.log(`Adapta backend running on http://localhost:${PORT}`);
     });
   })
   .catch((err) => {

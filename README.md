@@ -1,12 +1,12 @@
-# SereneStudy AI 📚
+# Adapta AI 📚
 
-**SereneStudy AI** is an intelligent, full-stack study planning application designed to help students prepare for exams with AI-powered personalized study plans, interactive learning sessions, quizzes, and progress tracking.
+**Adapta AI** is an intelligent, full-stack study planning application designed to help students prepare for exams with AI-powered personalized study plans, interactive learning sessions, quizzes, and progress tracking.
 
 ---
 
 ## 📖 Overview
 
-SereneStudy AI combines modern web technologies with AI to create a stress-free learning experience. The application adapts to your schedule, learning style, and exam dates to generate optimized study plans.
+Adapta AI combines modern web technologies with AI to create a stress-free learning experience. The application adapts to your schedule, learning style, and exam dates to generate optimized study plans.
 
 ### Key Features
 
@@ -34,7 +34,7 @@ SereneStudy AI combines modern web technologies with AI to create a stress-free 
 ### Backend
 - **Node.js** with Express
 - **Azure Cosmos DB** for data persistence
-- **Google Gemini AI** (gemini-1.5-flash) for AI features
+- **Google Gemini AI** (gemini-2.5-flash) for AI features
 - **bcrypt** for secure password hashing
 - **CORS** enabled for cross-origin requests
 
@@ -151,7 +151,7 @@ COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnq
 # COSMOS_ENDPOINT=https://your-account.documents.azure.com:443/
 # COSMOS_KEY=your_cosmos_db_primary_key
 
-COSMOS_DATABASE_NAME=serenestudy
+COSMOS_DATABASE_NAME=Adapta
 COSMOS_USERS_CONTAINER=users
 COSMOS_ONBOARDING_CONTAINER=onboarding
 
@@ -174,11 +174,11 @@ The backend server will start on `http://localhost:3001`
 
 You should see:
 ```
-Database 'serenestudy' ready
+Database 'Adapta' ready
 Container 'users' ready
 Container 'onboarding' ready
 Container 'tasks' ready
-SereneStudy backend running on http://localhost:3001
+Adapta backend running on http://localhost:3001
 ```
 
 ### 3. Frontend Setup
