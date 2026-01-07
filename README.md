@@ -10,15 +10,14 @@ Adapta AI combines modern web technologies with AI to create a stress-free learn
 
 ### Key Features
 
-- 🎯 **AI-Powered Study Plans**: Generate personalized daily study schedules based on your syllabus, exam date, and available hours
-- 📅 **Smart Calendar**: Visualize your study plan with an interactive calendar view
-- 📖 **Interactive Learning**: Access AI-generated learning content tailored to your topics
+- 🎯 **AI-Powered Holistic Plans**: Generate study schedules that balance multiple simultaneous goals (Exams & Skills) within your daily capacity.
+- 📅 **Smart Dual-View Calendar**: Toggle between a compact horizontal strip and a 4-week grid view, with subject-specific color-coding for tasks and deadlines.
+- ⚡ **Priority-Based Scaling**: Automatically prioritizes exams with closer deadlines using a "70/30 Rule" for daily time allocation.
+- 🏔️ **Crunch & Mood Adaptation**: Adjusts intensity based on your mood (High energy = Complex topics) and activates "Crunch Mode" for imminent exams.
+- ✍️ **Premium UI Elements**: Includes custom numeric steppers for daily hours and a glassmorphism design language throughout.
 - 🧠 **Intelligent Quizzes**: Practice with AI-generated quizzes and get instant feedback
 - 💬 **AI Tutor Chat**: Get help anytime with an AI-powered study assistant
 - 📊 **Progress Tracking**: Monitor your learning journey through insights and analytics
-- 📚 **Resource Discovery**: Find curated study materials and resources
-- 🔄 **Adaptive Replanning**: Automatically adjust your schedule when life happens
-- 👤 **User Profiles**: Track your study habits and preferences
 
 ---
 
