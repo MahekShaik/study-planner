@@ -37,9 +37,7 @@ Adapta AI combines modern web technologies with AI to create a stress-free learn
 - **bcrypt** for secure password hashing
 - **CORS** enabled for cross-origin requests
 
-### AI Integration
 - Google Generative AI for study plan generation, quiz creation, chat assistance, and content generation
-- Azure OpenAI (optional) for revision content generation
 
 ---
 
@@ -150,17 +148,12 @@ COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnq
 # COSMOS_ENDPOINT=https://your-account.documents.azure.com:443/
 # COSMOS_KEY=your_cosmos_db_primary_key
 
-COSMOS_DATABASE_NAME=Adapta
+COSMOS_DATABASE_NAME=serenestudy
 COSMOS_USERS_CONTAINER=users
 COSMOS_ONBOARDING_CONTAINER=onboarding
 
 # Server Configuration
 PORT=3001
-
-# Azure OpenAI (Optional - for revision content)
-# AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint
-# AZURE_OPENAI_KEY=your_azure_openai_key
-# AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
 ```
 
 #### Start the Backend Server
@@ -173,7 +166,7 @@ The backend server will start on `http://localhost:3001`
 
 You should see:
 ```
-Database 'Adapta' ready
+Database 'serenestudy' ready
 Container 'users' ready
 Container 'onboarding' ready
 Container 'tasks' ready

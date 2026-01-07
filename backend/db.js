@@ -32,8 +32,8 @@ const client = new CosmosClient({
 });
 
 const databaseName = COSMOS_DATABASE_NAME;
-const usersContainerName = process.env.COSMOS_USERS_CONTAINER;
-const onboardingContainerName = process.env.COSMOS_ONBOARDING_CONTAINER;
+const usersContainerName = process.env.COSMOS_USERS_CONTAINER || 'users';
+const onboardingContainerName = process.env.COSMOS_ONBOARDING_CONTAINER || 'onboarding';
 
 const tasksContainerName = 'tasks';
 

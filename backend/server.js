@@ -748,22 +748,7 @@ app.post('/api/learning/content', async (req, res) => {
       else if (diffDays <= 7) proximity = 'Approaching';
     }
 
-    // Branch for Revision sessions
-    const isRevision = sessionType && (
-      sessionType.includes('Revision') ||
-      sessionType.includes('Practice') ||
-      sessionType.includes('Focus')
-    );
-
-    if (isRevision) {
-      try {
-        const content = await generateRevisionWithAzureOpenAI(subject, topic, level, examDate, learningStyle, proximity);
-        return res.json(content);
-      } catch (azureError) {
-        console.error('Azure OpenAI failed, falling back to Gemini:', azureError.message);
-        // Fallback to Gemini below
-      }
-    }
+    // Simplified: always use Gemini for all session types
 
     let systemInstruction = `You are a personalized learning assistant for Adapta. Help students study for exams.
 STRICT RULES:
@@ -786,68 +771,6 @@ STRICT RULES:
   }
 });
 
-// Helper for Azure OpenAI Revision Content
-async function generateRevisionWithAzureOpenAI(subject, topic, level, examDate, learningStyle, proximity) {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const key = process.env.AZURE_OPENAI_KEY;
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
-
-  if (!endpoint || !key || !deployment || key === 'your-azure-key') {
-    throw new Error('Azure OpenAI credentials missing. Please configure AZURE_OPENAI_KEY and ENDPOINT in .env');
-  }
-
-  const systemPrompt = `You are an exam revision assistant for Adapta.
-Your job is to generate concise, high-yield revision content for "${topic}" in "${subject}".
-
-RULES:
-- Assume the student is close to exam day.
-- Focus on formulas, definitions, and common mistakes.
-- Avoid long explanations.
-- No motivation, no emojis, no AI mentions.
-- Output must be structured and skimmable.
-- Proximity: ${proximity}. Level: ${level}. Learning Style: ${learningStyle}.
-
-TASK:
-1. Provide a breakdown of the topic into subparts.
-2. For each subpart, include: Key concepts, Must-remember formulas, Typical exam traps.
-3. The final subpart must be "Rapid-Fire Check" containing 5 quick revision questions.
-
-Return JSON object with "subparts" array [ { "title": "...", "content": "..." } ].`;
-
-  const url = `${endpoint.replace(/\/$/, '')}/openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': key
-    },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: 'You are a professional exam revision assistant. Return pure JSON.' },
-        { role: 'user', content: systemPrompt }
-      ],
-      response_format: { type: "json_object" }
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(`Azure OpenAI Error: ${err.error?.message || response.statusText}`);
-  }
-
-  const result = await response.json();
-  const rawContent = result.choices[0].message.content;
-
-  let jsonString = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-  const firstBrace = jsonString.indexOf('{');
-  const lastBrace = jsonString.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-  }
-
-  return JSON.parse(jsonString);
-}
 
 // Initialize and Start Server
 initializeDatabase()
