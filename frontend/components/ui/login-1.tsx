@@ -206,23 +206,39 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
 
                         {/* Daily Hours field for Signup */}
                         {!isLogin && (
-                            <div>
-                                <label htmlFor="dailyHours" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                            <div className="animate-fade-in">
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2.5">
                                     Daily Study Hours
                                 </label>
-                                <input
-                                    type="number"
-                                    id="dailyHours"
-                                    name="dailyHours"
-                                    min="1"
-                                    max="12"
-                                    value={formData.dailyHours}
-                                    onChange={handleInputChange}
-                                    className="w-full px-4 py-3 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-400"
-                                    placeholder="4"
-                                    required
-                                />
-                                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">How many hours can you study per day?</p>
+                                <div className="flex items-center gap-3 bg-white dark:bg-zinc-950 p-2 border border-slate-200 dark:border-zinc-700 rounded-2xl shadow-sm">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newVal = Math.max(1, formData.dailyHours - 1);
+                                            setFormData(prev => ({ ...prev, dailyHours: newVal }));
+                                        }}
+                                        className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all font-bold text-xl active:scale-90"
+                                    >
+                                        −
+                                    </button>
+                                    <div className="flex-1 text-center py-2">
+                                        <span className="text-2xl font-bold text-slate-900 dark:text-white">
+                                            {formData.dailyHours}
+                                        </span>
+                                        <span className="text-sm text-slate-400 dark:text-slate-500 font-medium ml-2">hours</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newVal = Math.min(12, formData.dailyHours + 1);
+                                            setFormData(prev => ({ ...prev, dailyHours: newVal }));
+                                        }}
+                                        className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all font-bold text-xl active:scale-90"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                                <p className="mt-2.5 text-xs text-slate-500 dark:text-slate-400 italic">This helps Adapta balance tasks across all your active goals.</p>
                             </div>
                         )}
 

@@ -37,6 +37,24 @@
     }
 }
 
+@layer utilities {
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease-out;
+    }
+    .animate-slide-up {
+        animation: slideUp 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes slideUp {
+        from { transform: translateY(10px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+}
+
 @layer components {
     .g-button {
         @apply rounded-[var(--radius)] border;

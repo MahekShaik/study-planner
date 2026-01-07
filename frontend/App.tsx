@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Screen, StudyTask, AIInsight, OnboardingData, QuizResult } from './types';
 import { MOCK_INSIGHTS } from './constants';
 import { evaluateQuizPerformance, chatWithAI, getAIResources } from './services/geminiService';
@@ -43,6 +43,30 @@ const App: React.FC = () => {
     }
   }, [token]);
 
+  // Unified Filtering Logic: Exams unified, Skills isolated
+  const filteredData = useMemo(() => {
+    if (!selectedPlan) return { tasks: [], plans: [] };
+    const today = new Date().toISOString().split('T')[0];
+
+    const isExam = selectedPlan.mode === 'exam';
+
+    const matchedPlans = isExam
+      ? allPlans.filter(p => p.mode === 'exam')
+      : [selectedPlan];
+
+    const matchedTasks = tasks.filter(t => {
+      return matchedPlans.some(p => {
+        const planSubject = (p.mode === 'exam' ? p.level : p.skill || '').toLowerCase();
+        const taskSubject = (t.subject || '').toLowerCase();
+        // Skip expired exam plans
+        if (p.mode === 'exam' && p.examDate && p.examDate < today) return false;
+        return planSubject && (taskSubject.includes(planSubject) || planSubject.includes(taskSubject));
+      });
+    });
+
+    return { tasks: matchedTasks, plans: matchedPlans };
+  }, [selectedPlan, allPlans, tasks]);
+
   async function hydrateSession(authToken: string) {
     try {
       console.log('[Navigation Debug] Hydrating session...');
@@ -61,35 +85,26 @@ const App: React.FC = () => {
         }
       }
 
-      // Fetch ALL Plans
-      const plansResponse = await fetch('/api/onboarding', {
+      // Fetch Active Plans and Tasks from the unified endpoint
+      const activePlanResponse = await fetch('/api/study-plan/active', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
-      // Fetch ALL Tasks
-      const tasksResponse = await fetch('/api/tasks', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-
-      if (plansResponse.ok && tasksResponse.ok) {
-        const plans = await plansResponse.json();
-        const allTasks = await tasksResponse.json();
+      if (activePlanResponse.ok) {
+        const { plans, tasks: allTasks, plan: primaryPlan } = await activePlanResponse.json();
 
         setAllPlans(plans || []);
         setTasks(allTasks || []);
 
-        if (plans.length > 0) {
-          // Default to the most recent plan
-          setSelectedPlan(plans[0]);
+        if (plans && plans.length > 0) {
+          // Default to the first plan if none selected
+          setSelectedPlan(primaryPlan);
 
           // Only switch to dashboard if mood check isn't required
           if (targetScreen !== 'mood-check') {
             targetScreen = 'dashboard';
           }
         } else {
-          // If no plans, ensure we don't accidentally skip mood check if requested
-          // though typically mood check is for active study days.
-          // Keep it as 'mood-check' if profile said so, else 'onboarding'
           if (targetScreen !== 'mood-check') {
             targetScreen = 'onboarding';
           }
@@ -97,7 +112,7 @@ const App: React.FC = () => {
 
         console.log(`[Navigation Debug] Session hydrated. Transitioning to: ${targetScreen}`);
         setCurrentScreen(targetScreen);
-      } else if (plansResponse.status === 401 || tasksResponse.status === 401) {
+      } else if (activePlanResponse.status === 401) {
         handleExitSession();
       }
     } catch (e) {
@@ -325,21 +340,7 @@ const App: React.FC = () => {
       case 'dashboard':
       case 'learning':
       case 'quiz':
-        // Filter tasks to match the currently selected plan (by level/skill matches)
-        const activePlanKeyword = selectedPlan?.mode === 'exam' ? selectedPlan.level : selectedPlan?.skill;
-        const filteredTasks = tasks.filter(t => {
-          if (!activePlanKeyword) return true; // Show all if no plan selected (fallback)
-
-          // Check if exam is over for this plan
-          if (selectedPlan?.mode === 'exam' && selectedPlan?.examDate) {
-            const today = new Date().toISOString().split('T')[0];
-            if (selectedPlan.examDate < today) return false;
-          }
-
-          const taskSubject = (t.subject || '').toLowerCase();
-          const planSubject = activePlanKeyword.toLowerCase();
-          return taskSubject.includes(planSubject) || planSubject.includes(taskSubject);
-        });
+        const { tasks: filteredTasks, plans: filteredPlans } = filteredData;
 
         if (currentScreen === 'learning' && activeTask) {
           return (
@@ -388,15 +389,10 @@ const App: React.FC = () => {
       case 'insights':
         return <InsightsPanel insights={insights} streakHistory={userProfile?.streakHistory || []} />;
       case 'calendar':
-        const calTasks = tasks.filter(t =>
-          selectedPlan?.level === t.subject ||
-          selectedPlan?.skill === t.subject ||
-          selectedPlan?.syllabus?.includes(t.subject)
-        );
         return (
           <CalendarView
-            tasks={calTasks}
-            examDate={selectedPlan?.examDate}
+            tasks={filteredData.tasks}
+            activePlans={filteredData.plans}
             onStartTask={handleStartTask}
             onMarkCompleted={handleMarkCompleted}
           />

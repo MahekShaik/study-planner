@@ -30,7 +30,12 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile state
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false); // Desktop state
 
-  const examName = (onboardingData?.level || onboardingData?.skill || 'Study Plan').toUpperCase();
+  const examPlans = allPlans.filter(p => p.mode === 'exam');
+  const isUnifiedExam = onboardingData?.mode === 'exam' && examPlans.length > 1;
+
+  const examName = isUnifiedExam
+    ? `UNIFIED EXAM PATH (${examPlans.length} EXAMS)`
+    : (onboardingData?.level || onboardingData?.skill || 'Study Plan').toUpperCase();
   const completedCount = tasks.filter(t => t.status === 'completed').length;
   const totalTasks = tasks.length;
   const progressPercent = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;

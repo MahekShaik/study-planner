@@ -268,22 +268,32 @@ console.log("Configured API Key:", genAIKey === 'MISSING_KEY' ? 'MISSING' : (gen
 const genAI = new GoogleGenerativeAI(genAIKey);
 // Direct Gemini integration for syllabus extraction - Make.com integration has been removed.
 
-async function generatePlanFromOnboarding(data) {
-  const systemPrompt = `You are a study planning intelligence for a student exam preparation application.
-Your task is to transform exam preparation inputs into a structured daily study plan.
+async function generatePlanFromOnboarding(data, existingPlans = []) {
+  const existingPlansSummary = existingPlans.length > 0
+    ? existingPlans.map(p => `- ${p.onboardingData.level || p.onboardingData.skill} (Exam: ${p.onboardingData.examDate || 'Self-paced'})`).join('\n')
+    : 'None';
 
-TODAY'S DATE: ${new Date().toISOString().split('T')[0]} (Use this as the starting point for the plan)
+  const systemPrompt = `You are a study planning intelligence for a student.
+A student is ADDING a new goal. You must generate a plan that fits LONGSIDE their current commitments.
+
+TOTAL DAILY CAPACITY: ${data.hoursPerDay} hours/day.
+EXISTING ACTIVE GOALS:
+${existingPlansSummary}
+
+NEW GOAL TO ADD:
+Mode: ${data.mode}
+Subject/Level: ${data.level || data.skill}
+Exam/Target Date: ${data.examDate || data.skillDuration}
 
 --------------------------------
 PLANNING LOGIC (STRICT)
 --------------------------------
-1. Syllabus Breakdown: Break the syllabus into main topics and then clear subtopics. Ensure no subtopic is skipped.
-2. Time Allocation (${data.planType} Mode): 
-   - Daily hours: ${data.hoursPerDay} hrs/day.
-   - Split daily time into: 70% new learning, 30% revision.
-   - Ensure earlier topics are revised multiple times before exam.
-3. Daily Session Generation: Assign subtopics to specific days (YYYY-MM-DD). Start from today. Each day must have study sessions.
-4. Exam Proximity Rule: As exam date (${data.examDate}) approaches, reduce new topics and increase revision. If the exam is very soon (e.g. 3 days away), focus heavily on high-yield revision and practice.
+2. Time Allocation & Priority:
+   - YOU MUST SHARE the ${data.hoursPerDay} daily hours across ALL active goals.
+   - PRIORITY: Goals with deadlines < 7 days away should receive ~70% of the total daily time.
+   - AVAILABILITY: The total load per day should not exceed ${data.hoursPerDay} hours, UNLESS this new goal (or an existing one) is in "Crunch Mode" (deadline < 3 days), in which case availability can be exceeded to ensure readiness.
+   - Session durations: 45-90 mins per session.
+4. Output Format: Return EXACTLY a JSON array of task objects.
 
 --------------------------------
 OUTPUT FORMAT (JSON ARRAY)
@@ -295,12 +305,10 @@ Each object must have:
 - subtopic: string
 - duration: string (e.g., "45 mins")
 - date: string (YYYY-MM-DD)
-- sessionType: string (e.g. "Core Learning", "Practice", "Active Revision", "Weak Area Focus")
-- aiExplanation: string (Brief reasoning why this session is important for the exam on ${data.examDate})
+- sessionType: string (e.g. "Core Learning", "Practice", "Active Revision")
+- aiExplanation: string (How this session fits into the student's busy schedule)
 - status: "pending"
-
-Example: [{"subject": "Math", "topic": "Algebra", "subtopic": "Linear Equations", "duration": "1 hr", "date": "2025-12-23", "sessionType": "Core Learning", "aiExplanation": "Starting with foundations to build momentum...", "status": "pending"}]
-DO NOT include any Markdown formatting or keys like "tasks" or "plan". Just the array.`;
+`;
 
   const userPrompt = data.mode === 'exam'
     ? `Today is ${new Date().toISOString().split('T')[0]}. Subject: ${data.level}. Total Syllabus: ${data.syllabus}. Exam Date: ${data.examDate}. Daily Hours: ${data.hoursPerDay}. 
@@ -363,40 +371,49 @@ app.get('/api/study-plan/active', async (req, res) => {
   try {
     const onboardingEntries = await getOnboarding(decoded.email);
     if (!onboardingEntries || onboardingEntries.length === 0) {
-      return res.json({ plan: null, tasks: [] });
+      return res.json({ plans: [], tasks: [] });
     }
 
-    const latestPlan = onboardingEntries[0].onboardingData;
+    const today = new Date().toISOString().split('T')[0];
 
-    // Check if exam is over
-    if (latestPlan.mode === 'exam' && latestPlan.examDate) {
-      const today = new Date().toISOString().split('T')[0];
-      if (latestPlan.examDate < today) {
-        console.log(`[Exam Check] Exam for ${decoded.email} was on ${latestPlan.examDate}, which is in the past. Returning empty plan.`);
-        return res.json({ plan: null, tasks: [] });
+    // Filter out expired plans (exams that already happened)
+    const activePlans = onboardingEntries.filter(entry => {
+      const plan = entry.onboardingData;
+      if (plan.mode === 'exam' && plan.examDate) {
+        return plan.examDate >= today;
       }
+      return true; // Skills/others don't expire for now
+    }).map(entry => entry.onboardingData);
+
+    if (activePlans.length === 0) {
+      return res.json({ plans: [], tasks: [] });
     }
 
     // Get user's current mood for the replanner
     const user = await getUserByEmail(decoded.email);
     const currentMood = user ? user.currentMood : 'okay';
 
-    // 1. Silent automatic replanning for missed days or mood shifts
+    // 1. Holistic automatic replanning
     await PlanningEngine.ensureOptimalPlan(decoded.email, currentMood);
 
-    // 2. Refresh tasks after potential redistribution
-    const planTasks = await (async () => {
-      const allTasks = await getTasks(decoded.email);
-      const validSubjects = [latestPlan.level, latestPlan.skill].filter(Boolean).map(s => s.toLowerCase());
-      return allTasks.filter(t => {
-        if (!t.subject) return false;
-        const taskSubject = t.subject.toLowerCase();
-        return validSubjects.some(s => taskSubject.includes(s) || s.includes(taskSubject));
-      });
-    })();
+    // 2. Fetch all tasks and filter for any of the active plan subjects
+    const allTasks = await getTasks(decoded.email);
+    const validSubjectKeywords = activePlans.flatMap(p => [p.level, p.skill].filter(Boolean).map(s => s.toLowerCase()));
 
-    console.log(`Active Plan: Found ${planTasks.length} tasks for user ${decoded.email}`);
-    res.json({ plan: latestPlan, tasks: planTasks });
+    const filteredTasks = allTasks.filter(t => {
+      if (!t.subject) return false;
+      const taskSubject = t.subject.toLowerCase();
+      return validSubjectKeywords.some(kw => taskSubject.includes(kw) || kw.includes(taskSubject));
+    });
+
+    console.log(`Active Plans: Found ${activePlans.length} plans and ${filteredTasks.length} tasks for user ${decoded.email}`);
+
+    // Maintain backward compatibility by still providing 'plan' (as the first one)
+    res.json({
+      plans: activePlans,
+      plan: activePlans[0],
+      tasks: filteredTasks
+    });
   } catch (error) {
     console.error('Fetch active plan error:', error);
     res.status(500).json({ message: 'Failed to fetch active study plan' });
@@ -413,8 +430,17 @@ app.post('/api/study-plan/generate', async (req, res) => {
 
     console.log(`Starting study plan generation for ${decoded.email}...`);
 
-    // 1. Generate tasks using AI (with retry logic built-in)
-    const generatedTasks = await generatePlanFromOnboarding(onboardingData);
+    // 0. Fetch existing plans for context
+    const existingPlans = await getOnboarding(decoded.email);
+    const activeExistingPlans = (existingPlans || []).filter(p => {
+      if (p.onboardingData.mode === 'exam' && p.onboardingData.examDate) {
+        return p.onboardingData.examDate >= new Date().toISOString().split('T')[0];
+      }
+      return true;
+    });
+
+    // 1. Generate tasks using AI (with context of existing plans)
+    const generatedTasks = await generatePlanFromOnboarding(onboardingData, activeExistingPlans);
 
     // 2. Validate tasks are non-empty before persisting
     if (!generatedTasks || generatedTasks.length === 0) {
