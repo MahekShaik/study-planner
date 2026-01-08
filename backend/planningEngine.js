@@ -1,4 +1,4 @@
-const { getTasks, saveTasks, getUserByEmail, getOnboarding, deletePendingTasks, updateOnboarding } = require('./db');
+const { getTasks, saveTasks, getUserByEmail, getOnboarding, deletePendingTasks, updateOnboarding, getQuizResults } = require('./db');
 const { callGeminiWithRetry, parseGeminiJson } = require('./geminiUtils');
 
 /**
@@ -29,6 +29,7 @@ class PlanningEngine {
 
             const allTasks = await getTasks(userEmail);
             const dailyHours = user.dailyHours || 4;
+            const quizResults = await getQuizResults(userEmail);
 
             // 1. Prepare context for ALL plans
             const plansContext = onboardingEntries.map(entry => {
@@ -51,6 +52,17 @@ class PlanningEngine {
                     isCrunchMode = diffDays <= 3;
                 }
 
+                // Summarize quiz performance for this specific plan
+                const relevantQuizzes = quizResults.filter(q => {
+                    const subject = (q.subject || '').toLowerCase();
+                    const target = planSubject.toLowerCase();
+                    return subject.includes(target) || target.includes(subject);
+                }).slice(0, 5); // Last 5 quizzes
+
+                const avgScore = relevantQuizzes.length > 0
+                    ? (relevantQuizzes.reduce((acc, q) => acc + (q.score / q.total), 0) / relevantQuizzes.length) * 100
+                    : null;
+
                 return {
                     id: entry.id,
                     subject: planSubject,
@@ -58,7 +70,9 @@ class PlanningEngine {
                     examDate: examDate,
                     isCrunchMode: isCrunchMode,
                     unfinishedTopics: unfinishedTopics,
-                    totalPendingTasks: unfinishedTopics.length
+                    totalPendingTasks: unfinishedTopics.length,
+                    performanceIndex: avgScore ? `${avgScore.toFixed(0)}% accuracy` : 'No data yet',
+                    recentWeakTopics: [...new Set(relevantQuizzes.flatMap(q => q.weakSubtopics || []))]
                 };
             });
 
@@ -73,26 +87,43 @@ class PlanningEngine {
             // 2. Prepare Holistic AI Prompt
             const prompt = `You are an agentic study planner. Your goal is to REPLAN a student's schedule across MULTIPLE goals.
             
-            CONTEXT:
-            - Today's Date: ${todayStr}
-            - User's Total Daily Capacity: ${dailyHours} hours/day
+            USER PROFILE:
+            - User Streak: ${user.currentStreak || 0} days
+            - User Daily Capacity: ${dailyHours} hours/day
             - Current Mood: ${currentMood.toUpperCase()} (${moodMap[currentMood] || 'Neutral'})
             
             ACTIVE GOALS & STATUS:
             ${JSON.stringify(plansContext, null, 2)}
             
-            STRICT RULES:
-            1. TASK COUNT CONSISTENCY: For each subject, the number of tasks in your output MUST MATCH the 'totalPendingTasks' count provided. Do NOT add or remove topics.
-            2. SKILL MODE SHIFT: For plans where mode is 'skill', if there are missed tasks, simply shift the schedule forward. The original duration (e.g. 4 weeks) can be exceeded.
-            3. CRUNCH MODE (EXAM ONLY): If 'isCrunchMode' is true for an exam plan, you MAY drop optional or minor subtopics to focus on high-yield revision. This is the ONLY exception to Rule 1.
-            4. MOOD DISTRIBUTION: Redistribute the SAME number of unfinished topics according to the student's mood. 
+            ---------------------------------------------------------
+            STRICT PLANNING CONSTRAINTS (MANDATORY)
+            ---------------------------------------------------------
+            1. TASK COUNT CONSISTENCY: For each subject, the number of tasks in your output MUST MATCH the 'totalPendingTasks' count provided. Do NOT add new topics or remove existing ones.
+               - EXCEPTION: If 'isCrunchMode' is true for an EXAM plan, you MAY drop optional or minor subtopics to focus on high-yield revision. This is the ONLY exception.
+            
+            2. MODE-SPECIFIC LOGIC:
+               A. SKILL MODE (mode: 'skill'):
+                  - USE performance metrics: If 'performanceIndex' < 60% or specific 'recentWeakTopics' exist, prioritize "Practice" or "Reinforcement Revision" for those topics today/tomorrow.
+                  - REPLAN based on Mood: Adjust session intensity/order based on current state.
+                  - NO CRUNCH MODE: Every single task MUST be preserved. No topics can be dropped.
+                  - CHRONOLOGICAL SHIFT: If tasks were missed in the past, simply shift the entire sequence forward starting from ${todayStr}.
+               
+               B. EXAM MODE (mode: 'exam'):
+                  - USE performance metrics: If 'performanceIndex' < 60% or specific 'recentWeakTopics' exist, prioritize "Practice" or "Reinforcement Revision" for those topics today/tomorrow.
+                  - CRUNCH MODE EXCEPTION: Total task count remains same UNLESS in Crunch Mode (< 3 days to exam), where optional items can be dropped.
+            
+            3. STREAK MAINTENANCE: Acknowledge the user's ${user.currentStreak || 0}-day streak in 'aiExplanation' to keep them motivated.
+            
+            4. MOOD DISTRIBUTION: 
                - If 'FRESH': Assign the most complex/intense subtopics to TODAY.
                - If 'TIRED/STRESSED': Assign easier, revision-based, or bite-sized subtopics to TODAY.
-            5. BALANCED LOAD (PRIORITY WEIGHTED): Distribute the total time across ALL active subjects daily. 
+            
+            5. BALANCED LOAD (PRIORITY WEIGHTED): Distribute total time across ALL active subjects daily. 
                - Subjects with exams < 7 days away should receive roughly 70% of the daily capacity.
                - Ensure NO subject is completely starved (minimum 30-45 mins if tasks exist).
-            6. AVAILABILITY GUARD: Usually, the total duration of tasks on any single day MUST NOT exceed ${dailyHours} hours.
-               - EXCEPTION: If 'isCrunchMode' is true for ANY exam plan, you SHALL ignore this limit for that day to ensure the student is fully prepared for the imminent exam.
+            
+            6. AVAILABILITY GUARD: Usually, total duration per day MUST NOT exceed ${dailyHours} hours.
+               - EXCEPTION: Crunch Mode for exams SHALL ignore this limit to ensure readiness.
             
             OUTPUT:
             Return ONLY a raw JSON array of task objects.
