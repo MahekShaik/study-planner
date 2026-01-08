@@ -102,31 +102,42 @@ async function callGeminiWithRetry({
  * @returns {Array|Object} Parsed JSON
  */
 function parseGeminiJson(text) {
+    if (!text) return null;
+
     try {
-        // Basic cleaning
-        let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        // 1. Remove markdown code blocks if present
+        let cleaned = text.replace(/```json\s?/g, '').replace(/```\s?/g, '').trim();
 
-        // Find first and last brackets if it's an array
-        const firstBracket = jsonString.indexOf('[');
-        const lastBracket = jsonString.lastIndexOf(']');
+        // 2. Try direct parse first
+        try {
+            return JSON.parse(cleaned);
+        } catch (e) {
+            // Continue to extraction logic
+        }
 
-        // Find first and last braces if it's an object
-        const firstBrace = jsonString.indexOf('{');
-        const lastBrace = jsonString.lastIndexOf('}');
+        // 3. Extract the largest JSON structure (array or object)
+        const firstBracket = cleaned.indexOf('[');
+        const lastBracket = cleaned.lastIndexOf(']');
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace = cleaned.lastIndexOf('}');
 
-        // If it's an array, extract the array part
+        let extracted = null;
+
+        // Prefer array if both exist and array is outer, or only array exists
         if (firstBracket !== -1 && lastBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
-            jsonString = jsonString.substring(firstBracket, lastBracket + 1);
-        }
-        // If it's an object, extract the object part
-        else if (firstBrace !== -1 && lastBrace !== -1) {
-            jsonString = jsonString.substring(firstBrace, lastBrace + 1);
+            extracted = cleaned.substring(firstBracket, lastBracket + 1);
+        } else if (firstBrace !== -1 && lastBrace !== -1) {
+            extracted = cleaned.substring(firstBrace, lastBrace + 1);
         }
 
-        return JSON.parse(jsonString);
+        if (extracted) {
+            return JSON.parse(extracted);
+        }
+
+        throw new Error("No JSON structure found in response");
     } catch (error) {
-        console.error('[Gemini Parsing Error] Failed to parse JSON:', error.message);
-        throw new Error('Failed to parse AI response into structured data.');
+        console.error('[Gemini Parsing Error] Failed to parse JSON. Raw response head:', text.substring(0, 200).replace(/\n/g, ' '));
+        throw new Error(`Failed to parse AI response: ${error.message}`);
     }
 }
 

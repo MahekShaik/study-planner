@@ -6,6 +6,7 @@ interface SidebarProps {
     currentPlan: OnboardingData | null;
     onSelectPlan: (plan: OnboardingData) => void;
     onNewPlan: () => void;
+    onViewLibrary: () => void;
     isOpen: boolean;
     onToggle: () => void;
 }
@@ -15,6 +16,7 @@ const Sidebar: React.FC<SidebarProps & { isCollapsed?: boolean; onToggleCollapse
     currentPlan,
     onSelectPlan,
     onNewPlan,
+    onViewLibrary,
     isOpen,
     onToggle,
     isCollapsed = false,
@@ -132,12 +134,22 @@ const Sidebar: React.FC<SidebarProps & { isCollapsed?: boolean; onToggleCollapse
                                 if (window.innerWidth < 768) onToggle();
                             }}
                             title={isCollapsed ? 'Add New Plan' : ''}
-                            className={`w-full py-3 px-4 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-bold uppercase tracking-wider hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 ${isCollapsed ? 'px-0' : ''}`}
+                            className={`w-full py-3 px-4 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-bold uppercase tracking-wider hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 mb-2 ${isCollapsed ? 'px-0' : ''}`}
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                             </svg>
                             <span className={isCollapsed ? 'hidden' : 'block'}>Add New</span>
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                onViewLibrary();
+                                if (window.innerWidth < 768) onToggle();
+                            }}
+                            className={`w-full py-2 text-center text-[10px] font-bold text-slate-400 hover:text-indigo-600 transition-colors uppercase tracking-widest ${isCollapsed ? 'hidden' : 'block'}`}
+                        >
+                            Open Full Library
                         </button>
                     </div>
                 </div>

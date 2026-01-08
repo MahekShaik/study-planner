@@ -10,6 +10,7 @@ interface StudyDashboardProps {
   onMarkCompleted: (task: StudyTask) => void;
   onStartNewPlan: () => void;
   onSelectPlan: (plan: OnboardingData) => void;
+  onViewLibrary: () => void;
   onViewResources: (task: StudyTask) => void;
   streak?: number;
 }
@@ -22,6 +23,7 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
   onMarkCompleted,
   onStartNewPlan,
   onSelectPlan,
+  onViewLibrary,
   onViewResources,
   streak = 0
 }) => {
@@ -29,6 +31,7 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile state
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false); // Desktop state
+  const [searchTerm, setSearchTerm] = useState('');
 
   const examPlans = allPlans.filter(p => p.mode === 'exam');
   const isUnifiedExam = onboardingData?.mode === 'exam' && examPlans.length > 1;
@@ -40,10 +43,17 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
   const totalTasks = tasks.length;
   const progressPercent = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
 
-  // Filter tasks to show only pending/active ones
+  // Filter tasks to show only pending/active ones matching search
   const activeTasks = useMemo(() => {
-    return tasks.filter(t => t.status !== 'completed');
-  }, [tasks]);
+    return tasks.filter(t => {
+      const isPending = t.status !== 'completed';
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch =
+        t.topic.toLowerCase().includes(searchLower) ||
+        t.subtopic.toLowerCase().includes(searchLower);
+      return isPending && matchesSearch;
+    });
+  }, [tasks, searchTerm]);
 
   const isExamOver = useMemo(() => {
     if (onboardingData?.mode === 'exam' && onboardingData?.examDate) {
@@ -64,6 +74,7 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
         currentPlan={onboardingData}
         onSelectPlan={onSelectPlan}
         onNewPlan={onStartNewPlan}
+        onViewLibrary={onViewLibrary}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         isCollapsed={isDesktopCollapsed}
@@ -125,11 +136,39 @@ const StudyDashboard: React.FC<StudyDashboardProps> = ({
 
           {/* Daily Tasks Section */}
           <section>
-            <div className="flex justify-between items-center mb-8 px-1">
-              <h3 className="text-xl font-bold text-primary tracking-tight">Active Study Plan</h3>
-              <span className="text-sage-primary text-[10px] font-bold bg-sage-light px-3 py-1 rounded-full uppercase tracking-widest">
-                {activeTasks.length} {activeTasks.length === 1 ? 'Task' : 'Tasks'}
-              </span>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 px-1">
+              <div className="flex items-center gap-4">
+                <h3 className="text-xl font-bold text-primary tracking-tight">Active Study Plan</h3>
+                <span className="text-sage-primary text-[10px] font-bold bg-sage-light px-3 py-1 rounded-full uppercase tracking-widest">
+                  {activeTasks.length} {activeTasks.length === 1 ? 'Task' : 'Tasks'}
+                </span>
+              </div>
+
+              {/* Modern Search Bar */}
+              <div className="relative group w-full md:w-64">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-slate-400 group-focus-within:text-sage-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search topics or subtopics..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl leading-5 bg-white/50 backdrop-blur-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sage-primary/30 focus:border-sage-primary sm:text-xs transition-all shadow-sm group-hover:border-slate-300"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-6">

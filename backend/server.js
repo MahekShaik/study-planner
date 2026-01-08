@@ -398,24 +398,33 @@ app.get('/api/study-plan/active', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
 
     // Filter out expired plans (exams that already happened)
-    const activePlans = onboardingEntries.filter(entry => {
+    const activeEntries = onboardingEntries.filter(entry => {
       const plan = entry.onboardingData;
       if (plan.mode === 'exam' && plan.examDate) {
         return plan.examDate >= today;
       }
       return true; // Skills/others don't expire for now
-    }).map(entry => entry.onboardingData);
+    });
 
-    if (activePlans.length === 0) {
+    if (activeEntries.length === 0) {
       return res.json({ plans: [], tasks: [] });
     }
+
+    const activePlans = activeEntries.map(entry => entry.onboardingData);
 
     // Get user's current mood for the replanner
     const user = await getUserByEmail(decoded.email);
     const currentMood = user ? user.currentMood : 'okay';
 
-    // 1. Holistic automatic replanning
-    await PlanningEngine.ensureOptimalPlan(decoded.email, currentMood);
+    // CRITICAL: Only replan if at least one active plan is outdated (>24hrs old)
+    const needsReplan = activeEntries.some(entry => entry.lastReplanned !== today);
+
+    if (needsReplan) {
+      console.log(`[Login Flow] Plan needs replanning for ${decoded.email}. Triggering holistic rebalance...`);
+      await PlanningEngine.ensureOptimalPlan(decoded.email, currentMood);
+    } else {
+      console.log(`[Login Flow] All plans are current for ${decoded.email}. Skipping replan.`);
+    }
 
     // 2. Fetch all tasks and filter for any of the active plan subjects
     const allTasks = await getTasks(decoded.email);

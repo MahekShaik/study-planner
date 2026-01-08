@@ -20,10 +20,30 @@ class PlanningEngine {
 
             if (!onboardingEntries || onboardingEntries.length === 0) return { redistributed: false };
 
-            // Check if ANY plan needs replanning today
-            // We replan all if even one is outdated to ensure balance across goals
-            const needsReplan = onboardingEntries.some(entry => entry.lastReplanned !== todayStr);
-            if (!needsReplan) return { redistributed: false };
+            // 1. Filter out inactive plans (expired exams) to prevent old tests from triggering replans
+            const activeEntries = onboardingEntries.filter(entry => {
+                const plan = entry.onboardingData;
+                if (!plan) return false;
+                if (plan.mode === 'exam' && plan.examDate) {
+                    return plan.examDate >= todayStr;
+                }
+                return true; // Skill mode or other plans remain active
+            });
+
+            if (activeEntries.length === 0) {
+                console.log(`[PlanningEngine] No active plans for ${userEmail}. Skipping replan.`);
+                return { redistributed: false };
+            }
+
+            // Check if ANY active plan needs replanning today
+            const triggeringEntry = activeEntries.find(entry => entry.lastReplanned !== todayStr);
+            const needsReplan = !!triggeringEntry;
+
+            if (needsReplan) {
+                console.log(`[PlanningEngine] Replan triggered for ${userEmail} by active entry: ${triggeringEntry.id} (lastReplanned: ${triggeringEntry.lastReplanned || 'never'})`);
+            } else {
+                return { redistributed: false };
+            }
 
             console.log(`[PlanningEngine] Holistic re-balancing for ${userEmail}. Mood: ${currentMood}`);
 
@@ -149,7 +169,7 @@ class PlanningEngine {
                     await saveTasks(userEmail, tasksToSave);
 
                     // 5. Mark all plans as updated
-                    for (const entry of onboardingEntries) {
+                    for (const entry of activeEntries) {
                         await updateOnboarding(entry.id, userEmail, { lastReplanned: todayStr });
                     }
 
@@ -157,8 +177,16 @@ class PlanningEngine {
                     return { redistributed: true, count: newTasks.length };
                 }
             } catch (err) {
-                console.error(`[PlanningEngine] Holistic AI Error:`, err.message);
-                return { error: err.message };
+                console.error(`[PlanningEngine] Holistic AI/Parsing Error:`, err.message);
+
+                // CRITICAL: Even if it fails, we mark it as "replanned" for TODAY to stop the infinite loop.
+                // This ensures the user can still see the dashboard (even if it's the old plan) instead of being stuck.
+                console.warn(`[PlanningEngine] Marking plans as updated for today anyway to break loop.`);
+                for (const entry of activeEntries) {
+                    await updateOnboarding(entry.id, userEmail, { lastReplanned: todayStr });
+                }
+
+                return { error: err.message, redistributed: false };
             }
 
             return { redistributed: false };

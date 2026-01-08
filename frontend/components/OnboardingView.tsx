@@ -160,12 +160,22 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
         <div className="w-20 h-20 bg-[var(--primary)] rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-white text-4xl font-bold shadow-xl">A</div>
         <h1 className="text-4xl font-bold text-[var(--primary)] mb-2 tracking-tight">Focus your journey</h1>
         <p className="text-slate-400 font-light mb-6 text-lg">Choose how you'd like to prepare today.</p>
-        <button
-          onClick={onLogout}
-          className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--sage-primary)] hover:text-red-400 transition-all active:scale-95"
-        >
-          Sign Out
-        </button>
+        <div className="flex justify-center gap-6">
+          {onExamModeRequest && (
+            <button
+              onClick={onExamModeRequest}
+              className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--sage-primary)] hover:text-[#5F855F] transition-all active:scale-95"
+            >
+              View My Plans
+            </button>
+          )}
+          <button
+            onClick={onLogout}
+            className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-red-400 transition-all active:scale-95"
+          >
+            Sign Out
+          </button>
+        </div>
       </header>
 
       {step === 'mode' && (

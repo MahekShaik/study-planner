@@ -102,7 +102,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, streakHistory =
       <div className="mt-16 p-8 rounded-[32px] bg-[#2D3E35] text-white shadow-xl shadow-slate-200">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-2 h-2 rounded-full bg-[#8FB38F] animate-pulse"></div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#8FB38F]">Gemini Engine</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#8FB38F]">Groq Intelligence</span>
         </div>
         <p className="text-[14px] leading-relaxed font-light text-slate-200">
           <strong>Transparency Note:</strong> Adapta AI monitors your quiz accuracy, focus time, and subjective feedback to recalibrate your plan. Your path is uniquely tailored to your pace.

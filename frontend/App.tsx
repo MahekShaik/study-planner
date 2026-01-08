@@ -56,11 +56,18 @@ const App: React.FC = () => {
 
     const matchedTasks = tasks.filter(t => {
       return matchedPlans.some(p => {
-        const planSubject = (p.mode === 'exam' ? p.level : p.skill || '').toLowerCase();
+        const planLevel = (p.level || '').toLowerCase();
+        const planSkill = (p.skill || '').toLowerCase();
         const taskSubject = (t.subject || '').toLowerCase();
+
         // Skip expired exam plans
         if (p.mode === 'exam' && p.examDate && p.examDate < today) return false;
-        return planSubject && (taskSubject.includes(planSubject) || planSubject.includes(taskSubject));
+
+        // Match by level or skill keywords
+        const matchesLevel = planLevel && (taskSubject.includes(planLevel) || planLevel.includes(taskSubject));
+        const matchesSkill = planSkill && (taskSubject.includes(planSkill) || planSkill.includes(taskSubject));
+
+        return matchesLevel || matchesSkill;
       });
     });
 
@@ -105,13 +112,17 @@ const App: React.FC = () => {
             targetScreen = 'dashboard';
           }
         } else {
+          // If no plans, go to exam selection (Library) instead of jumping directly to onboarding
           if (targetScreen !== 'mood-check') {
-            targetScreen = 'onboarding';
+            targetScreen = 'exam-selection';
           }
         }
 
-        console.log(`[Navigation Debug] Session hydrated. Transitioning to: ${targetScreen}`);
+        console.log(`[Navigation Debug] Session hydrated. Transitioning to: ${targetScreen}. Plans: ${plans?.length || 0}`);
         setCurrentScreen(targetScreen);
+
+        // Fetch insights in the background
+        fetchInsights(authToken);
       } else if (activePlanResponse.status === 401) {
         handleExitSession();
       }
@@ -136,8 +147,8 @@ const App: React.FC = () => {
       if (response.ok) {
         // Update user profile to reflect mood has been logged
         setUserProfile(prev => prev ? { ...prev, needsMoodCheck: false, currentMood: mood } : prev);
-        // Navigate to dashboard if plan exists, otherwise onboarding
-        setCurrentScreen(selectedPlan ? 'dashboard' : 'onboarding');
+        // Navigate to dashboard if plan exists, otherwise library view
+        setCurrentScreen(selectedPlan ? 'dashboard' : 'exam-selection');
       } else {
         console.error('Failed to save mood');
       }
@@ -145,6 +156,20 @@ const App: React.FC = () => {
       console.error('Error saving mood:', error);
     }
   };
+
+  const fetchInsights = useCallback(async (authToken: string) => {
+    try {
+      const response = await fetch('/api/insights', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (response.ok) {
+        const { insights: newInsights } = await response.json();
+        setInsights(newInsights || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch insights", e);
+    }
+  }, []);
 
   const handleAuthSuccess = () => {
     const newToken = localStorage.getItem('authToken');
@@ -167,6 +192,7 @@ const App: React.FC = () => {
 
       if (response.ok) {
         const { plan, tasks: newTasks } = await response.json();
+        console.log('[Navigation Debug] Onboarding complete. Plan:', plan);
         setSelectedPlan(plan);
         // Append new tasks instead of replacing
         setTasks(prev => [...prev, ...(newTasks || [])]);
@@ -228,6 +254,7 @@ const App: React.FC = () => {
   };
 
   const handleSelectPlan = (plan: OnboardingData) => {
+    console.log('[Navigation Debug] Selecting plan:', plan.level || plan.skill);
     setSelectedPlan(plan);
     setCurrentScreen('dashboard');
   };
@@ -375,6 +402,7 @@ const App: React.FC = () => {
             onMarkCompleted={handleMarkCompleted}
             onStartNewPlan={handleStartNewExam}
             onSelectPlan={handleSelectPlan}
+            onViewLibrary={handleExamModeRequest}
             onViewResources={handleViewResources}
             streak={userProfile?.currentStreak || 0}
           />
@@ -456,9 +484,12 @@ const App: React.FC = () => {
 
               if (backToDashboard.includes(currentScreen)) {
                 setCurrentScreen('dashboard');
+              } else if (currentScreen === 'onboarding' && allPlans.length > 0) {
+                // If in onboarding but have plans, go to library or dashboard
+                setCurrentScreen('exam-selection');
               } else {
-                // Default back to landing for Auth, Onboarding, Dashboard, Mood-Check
-                handleExitSession(); // Ensure clean exit for Auth/Dashboard -> Landing
+                // Default back to landing for Auth, Onboarding (no plans), Dashboard, Mood-Check
+                handleExitSession();
               }
             }}
             className="fixed top-6 left-6 z-[60] px-5 py-2.5 bg-white/80 backdrop-blur-md border border-slate-200 rounded-full text-xs font-bold text-slate-600 uppercase tracking-widest shadow-sm hover:bg-white hover:text-indigo-600 hover:shadow-md hover:scale-105 active:scale-95 transition-all group flex items-center gap-2"
@@ -491,7 +522,12 @@ const App: React.FC = () => {
               ].map(item => (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentScreen(item.id as Screen)}
+                  onClick={() => {
+                    setCurrentScreen(item.id as Screen);
+                    if (item.id === 'insights' && token) {
+                      fetchInsights(token);
+                    }
+                  }}
                   className={`px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 ${currentScreen === item.id
                     ? 'bg-slate-900 text-white shadow-lg'
                     : 'text-slate-400 hover:text-slate-800 hover:bg-white'

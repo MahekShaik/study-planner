@@ -33,12 +33,15 @@ const ExamSelectionView: React.FC<ExamSelectionViewProps> = ({ plans, tasks, onS
                 {plans.map((plan, idx) => {
                     const title = plan.level || plan.skill || 'Untitled Plan';
                     const subtitle = plan.mode === 'exam' ? 'Exam Prep' : 'Skill Building';
+                    const subjectKey = (plan.level || plan.skill || '').toLowerCase();
 
-                    const planTasks = tasks.filter(t =>
-                        plan.level === t.subject ||
-                        plan.skill === t.subject ||
-                        (plan.syllabus && plan.syllabus.includes(t.subject))
-                    );
+                    const planTasks = tasks.filter(t => {
+                        const taskSubject = (t.subject || '').toLowerCase();
+                        return (
+                            (subjectKey && (taskSubject.includes(subjectKey) || subjectKey.includes(taskSubject))) ||
+                            (plan.syllabus && plan.syllabus.toLowerCase().includes(taskSubject))
+                        );
+                    });
                     const completed = planTasks.filter(t => t.status === 'completed').length;
                     const total = planTasks.length;
                     const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
