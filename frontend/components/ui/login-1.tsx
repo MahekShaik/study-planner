@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import React, { useState } from 'react';
-import { Eye, EyeOff, Brain } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import adaptaLogo from '../../assets/adapta-logo.png';
 
 interface LoginScreenProps {
     onAuthSuccess: (token: string) => void;
@@ -97,8 +98,8 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
                 </div>
 
                 <div className="text-white max-w-lg z-10">
-                    <div className="mb-8 p-4 bg-emerald-500/10 backdrop-blur-sm rounded-2xl w-fit border border-emerald-500/20">
-                        <Brain className="w-12 h-12 text-emerald-400" />
+                    <div className="mb-8 w-fit">
+                        <img src={adaptaLogo} alt="Adapta AI" className="w-24 h-24 object-contain opacity-90" />
                     </div>
                     <h1 className="text-5xl font-bold mb-6 leading-tight tracking-tight">
                         Unlock Your Potential with <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">Adapta AI</span>
@@ -128,8 +129,8 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
                 <div className="w-full max-w-md bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-xl dark:shadow-none border border-slate-100 dark:border-zinc-800">
                     {/* Logo/Icon (Mobile mostly) */}
                     <div className="text-center mb-8">
-                        <div className="lg:hidden inline-flex items-center justify-center w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl mb-4 text-emerald-600 dark:text-emerald-400">
-                            <Brain className="w-7 h-7" />
+                        <div className="lg:hidden inline-flex items-center justify-center mb-4">
+                            <img src={adaptaLogo} alt="Adapta AI" className="w-20 h-20 object-contain opacity-90" />
                         </div>
                         <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
                             {isLogin ? 'Welcome Back' : 'Get Started'}

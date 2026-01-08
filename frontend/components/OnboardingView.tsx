@@ -1,7 +1,9 @@
 
+
 import React, { useState } from 'react';
 import { OnboardingData } from '../types';
 import Carousel from './Carousel';
+import adaptaLogo from '../assets/adapta-logo.png';
 
 interface OnboardingViewProps {
   onComplete: (data: OnboardingData) => void;
@@ -157,7 +159,7 @@ const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete, onLogout, i
   return (
     <div className="max-w-xl mx-auto py-16 px-6 animate-fade-in bg-[var(--bg-main)]">
       <header className="mb-14 text-center">
-        <div className="w-20 h-20 bg-[var(--primary)] rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-white text-4xl font-bold shadow-xl">A</div>
+        <img src={adaptaLogo} alt="Adapta AI" className="w-28 h-28 mx-auto mb-6 object-contain opacity-90" />
         <h1 className="text-4xl font-bold text-[var(--primary)] mb-2 tracking-tight">Focus your journey</h1>
         <p className="text-slate-400 font-light mb-6 text-lg">Choose how you'd like to prepare today.</p>
         <div className="flex justify-center gap-6">
