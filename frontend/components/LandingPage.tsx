@@ -1,5 +1,6 @@
 import React from 'react';
 import { WavyBackground } from './ui/wavy-background';
+import adaptaLogo from '../assets/adapta-logo.png';
 
 interface LandingPageProps {
     onGetStarted: () => void;
@@ -8,12 +9,12 @@ interface LandingPageProps {
 
 const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
     return (
-        <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden">
+        <div className="min-h-screen bg-black font-sans text-slate-100 overflow-x-hidden">
             {/* Hero Section */}
             <section className="relative h-screen flex flex-col">
                 <nav className="absolute top-0 left-0 right-0 z-50 flex justify-between items-center px-8 py-6 max-w-7xl mx-auto w-full">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-xs text-white font-bold border border-white/30">A</div>
+                    <div className="flex items-center gap-3">
+                        <img src={adaptaLogo} alt="Adapta AI" className="w-14 h-14 object-contain" />
                         <span className="text-sm font-bold tracking-[0.2em] uppercase text-white shadow-sm">Adapta AI</span>
                     </div>
                     <button
@@ -42,23 +43,23 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
             </section>
 
             {/* Features Section */}
-            <section className="py-24 px-6 bg-slate-50">
+            <section className="py-24 px-6 bg-zinc-950/50 relative z-10">
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-20">
-                        <h2 className="text-xs font-bold text-emerald-600 uppercase tracking-[0.2em] mb-3">Why Adapta?</h2>
-                        <h3 className="text-3xl md:text-4xl font-bold text-[#251f47]">Precision Learning, Zero Burnout.</h3>
+                        <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-[0.2em] mb-3">Why Adapta?</h2>
+                        <h3 className="text-3xl md:text-4xl font-bold text-white">Precision Learning, Zero Burnout.</h3>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {[
-                            { title: "Smart Replanning", desc: "Life happens. Missed a day? Our AI automatically adjusts your schedule to keep you on track without the guilt.", icon: "�" },
-                            { title: "AI Tutor Support", desc: "Stuck on a concept? Get 24/7 personalized explanations and examples tailored to your learning style.", icon: "�" },
+                            { title: "Smart Replanning", desc: "Life happens. Missed a day? Our AI automatically adjusts your schedule to keep you on track without the guilt.", icon: "🔄" },
+                            { title: "AI Tutor Support", desc: "Stuck on a concept? Get 24/7 personalized explanations and examples tailored to your learning style.", icon: "🤖" },
                             { title: "Progress Checks", desc: "Regular quizzes ensure you've truly mastered topics before moving on, reinforcing long-term retention.", icon: "✅" }
                         ].map((feature, i) => (
-                            <div key={i} className="bg-[#D7F9FF] p-8 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all">
-                                <div className="text-5xl mb-6 bg-emerald-50 w-20 h-20 rounded-2xl flex items-center justify-center">{feature.icon}</div>
-                                <h4 className="text-xl font-bold text-[#251f47] mb-3">{feature.title}</h4>
-                                <p className="text-slate-500 font-light leading-relaxed">{feature.desc}</p>
+                            <div key={i} className="bg-white/5 backdrop-blur-lg p-8 rounded-[32px] border border-white/10 shadow-xl hover:bg-white/10 hover:-translate-y-1 transition-all group">
+                                <div className="text-5xl mb-6 bg-emerald-500/10 w-20 h-20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">{feature.icon}</div>
+                                <h4 className="text-xl font-bold text-white mb-3">{feature.title}</h4>
+                                <p className="text-slate-400 font-light leading-relaxed">{feature.desc}</p>
                             </div>
                         ))}
                     </div>
@@ -66,10 +67,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
             </section>
 
             {/* FAQ Section */}
-            <section className="py-24 px-6 bg-white overflow-hidden">
+            <section className="py-24 px-6 bg-black overflow-hidden">
                 <div className="max-w-4xl mx-auto">
                     <div className="text-center mb-16">
-                        <h2 className="text-3xl font-bold text-[#251f47] mb-4">Frequently Asked Questions</h2>
+                        <h2 className="text-3xl font-bold text-white mb-4">Frequently Asked Questions</h2>
                     </div>
 
                     <div className="space-y-4">
@@ -79,14 +80,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
                             { q: "What happens if I miss a task?", a: "No stress. Just mark it as pending, and our Smart Replanning feature will automatically redistribute the work over the remaining days." },
                             { q: "Is the AI Tutor really 24/7?", a: "Yes, our AI assistant is always available to answer doubts, provide analogies, or quiz you on specific topics whenever you need help." }
                         ].map((faq, i) => (
-                            <details key={i} className="group bg-slate-50 rounded-2xl border border-slate-100 open:bg-white open:shadow-lg open:border-emerald-100 transition-all duration-300">
-                                <summary className="flex justify-between items-center cursor-pointer p-6 list-none text-lg font-medium text-[#251f47]">
+                            <details key={i} className="group bg-slate-900/40 rounded-2xl border border-white/5 open:bg-slate-900/60 open:shadow-2xl open:border-emerald-500/30 transition-all duration-300">
+                                <summary className="flex justify-between items-center cursor-pointer p-6 list-none text-lg font-medium text-slate-200">
                                     {faq.q}
-                                    <span className="transform group-open:rotate-180 transition-transform duration-300 text-emerald-500">
+                                    <span className="transform group-open:rotate-180 transition-transform duration-300 text-emerald-400">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                                     </span>
                                 </summary>
-                                <div className="px-6 pb-6 text-slate-500 leading-relaxed animate-fade-in">
+                                <div className="px-6 pb-6 text-slate-400 leading-relaxed animate-fade-in">
                                     {faq.a}
                                 </div>
                             </details>
@@ -96,26 +97,26 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
             </section>
 
             {/* Founders Section */}
-            <section className="py-24 px-6 bg-white border-t border-slate-100">
+            <section className="py-24 px-6 bg-black border-t border-white/5">
                 <div className="max-w-5xl mx-auto">
                     <div className="text-center mb-16">
-                        <h2 className="text-3xl font-bold text-[#251f47] mb-4">Meet the Team</h2>
-                        <p className="text-slate-400 font-light">The minds behind Adapta AI.</p>
+                        <h2 className="text-3xl font-bold text-white mb-4">Meet the Team</h2>
+                        <p className="text-slate-500 font-light">The minds behind Adapta AI.</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
-                            { name: "Ishita Puranik", email: "ishitapurk14@gmail.com", color: "bg-purple-100 text-purple-600" },
-                            { name: "Spoorthi Chava", email: "spoorthichava06@gmail.com", color: "bg-emerald-100 text-emerald-600" },
-                            { name: "Geethanjali Bathini", email: "geethanjalibathini7@gmail.com", color: "bg-blue-100 text-blue-600" },
-                            { name: "Mahek Muskaan Shaik", email: "mahekm.shaik@gmail.com", color: "bg-pink-100 text-pink-600" }
+                            { name: "Ishita Puranik", email: "ishitapurk14@gmail.com", color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+                            { name: "Spoorthi Chava", email: "spoorthichava06@gmail.com", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+                            { name: "Geethanjali Bathini", email: "geethanjalibathini7@gmail.com", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+                            { name: "Mahek Muskaan Shaik", email: "mahekm.shaik@gmail.com", color: "bg-pink-500/10 text-pink-400 border-pink-500/20" }
                         ].map((founder, idx) => (
                             <div key={idx} className="group text-center">
-                                <div className={`w-32 h-32 mx-auto rounded-full mb-6 flex items-center justify-center text-3xl font-bold ${founder.color} transition-transform group-hover:scale-110`}>
+                                <div className={`w-32 h-32 mx-auto rounded-full mb-6 flex items-center justify-center text-3xl font-bold border ${founder.color} transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(255,255,255,0.05)]`}>
                                     {founder.name.charAt(0)}
                                 </div>
-                                <h4 className="text-lg font-bold text-[#251f47] mb-1">{founder.name}</h4>
-                                <a href={`mailto:${founder.email}`} className="text-xs text-slate-400 font-medium hover:text-emerald-600 transition-colors">
+                                <h4 className="text-lg font-bold text-white mb-1 group-hover:text-emerald-400 transition-colors">{founder.name}</h4>
+                                <a href={`mailto:${founder.email}`} className="text-xs text-slate-500 font-medium hover:text-emerald-400 transition-colors">
                                     {founder.email}
                                 </a>
                             </div>
@@ -124,9 +125,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
                 </div>
             </section>
 
-            <footer className="py-12 bg-[#251f47] text-white/40 text-center border-t border-white/10">
-                <div className="flex items-center justify-center gap-2 mb-4 opacity-70">
-                    <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white font-bold">A</div>
+            <footer className="py-12 bg-black text-white/30 text-center border-t border-white/5">
+                <div className="flex items-center justify-center gap-3 mb-4 opacity-50">
+                    <img src={adaptaLogo} alt="Adapta AI" className="w-10 h-10 object-contain" />
                     <span className="text-xs font-bold tracking-[0.2em] uppercase text-white">Adapta AI</span>
                 </div>
                 <p className="text-[10px]">© 2026 Adapta. All rights reserved.</p>

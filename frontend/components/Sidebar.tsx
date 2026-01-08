@@ -1,5 +1,6 @@
 import React from 'react';
 import { OnboardingData } from '../types';
+import adaptaLogo from '../assets/adapta-logo.png';
 
 interface SidebarProps {
     plans: OnboardingData[];
@@ -52,8 +53,8 @@ const Sidebar: React.FC<SidebarProps & { isCollapsed?: boolean; onToggleCollapse
 
                     {/* Header */}
                     <div className={`flex items-center gap-3 mb-10 px-2 mt-14 transition-all duration-300 ${isCollapsed ? 'justify-center' : ''}`}>
-                        <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-                            <span className="text-white font-bold text-sm">A</span>
+                        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[var(--sage-primary)]/10 flex items-center justify-center p-2">
+                            <img src={adaptaLogo} alt="Adapta AI" className="w-full h-full object-contain" />
                         </div>
                         <span className={`text-sm font-bold tracking-[0.1em] text-slate-900 uppercase transition-opacity duration-200 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
                             Adapta
