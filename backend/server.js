@@ -1,4 +1,19 @@
 require('dotenv').config();
+const appInsights = require('applicationinsights');
+
+if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+  appInsights.setup(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING)
+    .setAutoDependencyCorrelation(true)
+    .setAutoCollectRequests(true)
+    .setAutoCollectPerformance(true, true)
+    .setAutoCollectExceptions(true)
+    .setAutoCollectDependencies(true)
+    .setAutoCollectConsole(true)
+    .setUseDiskRetryCaching(true)
+    .setSendLiveMetrics(true)
+    .start();
+  console.log('Azure Application Insights initialized');
+}
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
@@ -11,11 +26,14 @@ const {
   saveTasks,
   getTasks,
   updateTaskProgress,
-  updateUser
+  updateUser,
+  saveQuizResult,
+  getQuizResults
 } = require('./db');
 const PlanningEngine = require('./planningEngine');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { callGeminiWithRetry, parseGeminiJson } = require('./geminiUtils');
+const { generatePersonalizedInsights } = require('./groqUtils');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -204,7 +222,10 @@ app.post('/api/onboarding', async (req, res) => {
 
   try {
     const onboardingData = req.body;
-    await createOnboarding(decoded.email, onboardingData.mode, onboardingData);
+    // Strip heavy files before saving to DB
+    const { syllabusFiles, ...savedOnboarding } = onboardingData;
+    const todayStr = new Date().toISOString().split('T')[0];
+    await createOnboarding(decoded.email, onboardingData.mode, savedOnboarding, { lastReplanned: todayStr });
     console.log('Saved onboarding data for:', decoded.email);
     res.json({ message: "Onboarding data received successfully." });
   } catch (error) {
@@ -456,13 +477,13 @@ app.post('/api/study-plan/generate', async (req, res) => {
     const savedTasks = await saveTasks(decoded.email, optimizedTasks);
 
     // 4. Only save onboarding data after tasks are successfully saved
-    // 4. Only save onboarding data after tasks are successfully saved
     // Strip heavy document data before saving
-    const { documentData, mimeType, ...savedOnboarding } = onboardingData;
-    await createOnboarding(decoded.email, onboardingData.mode, savedOnboarding);
+    const { syllabusFiles, ...savedOnboarding } = onboardingData;
+    const todayStr = new Date().toISOString().split('T')[0];
+    await createOnboarding(decoded.email, onboardingData.mode, savedOnboarding, { lastReplanned: todayStr });
 
     console.log(`Successfully generated and saved study plan for ${decoded.email}: ${savedTasks.length} tasks`);
-    res.json({ plan: onboardingData, tasks: savedTasks });
+    res.json({ plan: savedOnboarding, tasks: savedTasks });
   } catch (error) {
     console.error('Plan generation error:', error.message);
 
@@ -674,6 +695,16 @@ TONE: supportive, honest, exam-focused. No emojis. No AI mentions.`;
       await PlanningEngine.markTopicAsWeak(decoded.email, topic);
     }
 
+    // Persist result for insights
+    await saveQuizResult(decoded.email, {
+      subject,
+      topic,
+      score: evaluation.score,
+      total: evaluation.total,
+      weakSubtopics: evaluation.weakSubtopics,
+      stableSubtopics: evaluation.stableSubtopics
+    });
+
     res.json(evaluation);
   } catch (error) {
     console.error('Quiz evaluation error:', error);
@@ -768,6 +799,34 @@ STRICT RULES:
   } catch (error) {
     console.error('Learning content error:', error.message);
     res.status(500).json({ message: 'Failed to generate learning content', error: error.message });
+  }
+});
+
+// GET /api/insights
+app.get('/api/insights', async (req, res) => {
+  const decoded = verifyToken(req);
+  if (!decoded) return res.status(401).json({ message: 'Unauthorized' });
+
+  try {
+    const [user, tasks, quizResults] = await Promise.all([
+      getUserByEmail(decoded.email),
+      getTasks(decoded.email),
+      getQuizResults(decoded.email)
+    ]);
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const insights = await generatePersonalizedInsights({
+      name: user.name,
+      currentMood: user.currentMood || 'okay',
+      tasks,
+      quizResults
+    });
+
+    res.json({ insights });
+  } catch (error) {
+    console.error('Insights endpoint error:', error.message);
+    res.status(500).json({ message: 'Failed to generate insights', error: error.message });
   }
 });
 

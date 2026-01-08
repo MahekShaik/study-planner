@@ -41,6 +41,7 @@ let database;
 let usersContainer;
 let onboardingContainer;
 let tasksContainer;
+let quizResultsContainer;
 
 // In-memory fallback storage
 const memoryStore = {
@@ -56,7 +57,8 @@ const memoryStore = {
         }
     ],
     onboarding: [],
-    tasks: []
+    tasks: [],
+    quizResults: []
 };
 
 // Initialize database and containers
@@ -86,13 +88,21 @@ async function initializeDatabase() {
         onboardingContainer = onboardingC;
         console.log(`Container '${onboardingContainerName}' ready`);
 
-        // Create tasks container if it doesn't exist
-        const { container: tasksC } = await database.containers.createIfNotExists({
+        // Create tasks container and quizResults container blocks
+        const { container: tasksContainerItem } = await database.containers.createIfNotExists({
             id: tasksContainerName,
             partitionKey: { paths: ['/userEmail'] }
         });
-        tasksContainer = tasksC;
+        tasksContainer = tasksContainerItem;
         console.log(`Container '${tasksContainerName}' ready`);
+
+        // Create quizResults container if it doesn't exist
+        const { container: quizRC } = await database.containers.createIfNotExists({
+            id: 'quizResults',
+            partitionKey: { paths: ['/userEmail'] }
+        });
+        quizResultsContainer = quizRC;
+        console.log(`Container 'quizResults' ready`);
 
         return true;
     } catch (error) {
@@ -148,13 +158,14 @@ async function getUserByEmail(email) {
 }
 
 // Onboarding operations
-async function createOnboarding(userEmail, mode, onboardingData) {
+async function createOnboarding(userEmail, mode, onboardingData, extraFields = {}) {
     const onboarding = {
         id: `onboarding_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userEmail,
         mode,
         onboardingData,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ...extraFields
     };
 
     if (onboardingContainer) {
@@ -345,6 +356,45 @@ async function deletePendingTasks(userEmail, subject = null) {
     return true;
 }
 
+// Quiz results persistence
+async function saveQuizResult(userEmail, result) {
+    const item = {
+        ...result,
+        userEmail,
+        timestamp: new Date().toISOString(),
+        id: `quiz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    };
+
+    if (quizResultsContainer) {
+        try {
+            const { resource } = await quizResultsContainer.items.create(item);
+            return resource;
+        } catch (error) {
+            console.error('Failed to save quiz result in Cosmos DB:', error.message);
+        }
+    }
+
+    memoryStore.quizResults.push(item);
+    return item;
+}
+
+async function getQuizResults(userEmail) {
+    if (quizResultsContainer) {
+        try {
+            const querySpec = {
+                query: 'SELECT * FROM c WHERE c.userEmail = @userEmail ORDER BY c.timestamp DESC',
+                parameters: [{ name: '@userEmail', value: userEmail }]
+            };
+            const { resources } = await quizResultsContainer.items.query(querySpec).fetchAll();
+            return resources;
+        } catch (error) {
+            console.error('Failed to get quiz results in Cosmos DB:', error.message);
+        }
+    }
+
+    return memoryStore.quizResults.filter(r => r.userEmail === userEmail);
+}
+
 module.exports = {
     initializeDatabase,
     createUser,
@@ -356,5 +406,7 @@ module.exports = {
     saveTasks,
     getTasks,
     updateTaskProgress,
-    deletePendingTasks
+    deletePendingTasks,
+    saveQuizResult,
+    getQuizResults
 };
