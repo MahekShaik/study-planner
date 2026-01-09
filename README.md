@@ -11,13 +11,16 @@ Adapta AI combines modern web technologies with AI to create a stress-free learn
 ### Key Features
 
 - 🎯 **AI-Powered Holistic Plans**: Generate study schedules that balance multiple simultaneous goals (Exams & Skills) within your daily capacity.
+- 🔄 **Intelligent Replanning Engine**: Automatically adjusts your study plan based on missed tasks, quiz performance, and current mood - runs once daily to keep you on track.
 - 📅 **Smart Dual-View Calendar**: Toggle between a compact horizontal strip and a 4-week grid view, with subject-specific color-coding for tasks and deadlines.
 - ⚡ **Priority-Based Scaling**: Automatically prioritizes exams with closer deadlines using a "70/30 Rule" for daily time allocation.
 - 🏔️ **Crunch & Mood Adaptation**: Adjusts intensity based on your mood (High energy = Complex topics) and activates "Crunch Mode" for imminent exams.
+- 🔥 **Streak Tracking**: Build momentum with daily streak tracking - complete quizzes to maintain your learning streak.
+- 🎥 **YouTube Resource Integration**: Get curated YouTube tutorials and explanations for every topic you're studying.
 - ✍️ **Premium UI Elements**: Includes custom numeric steppers for daily hours and a glassmorphism design language throughout.
-- 🧠 **Intelligent Quizzes**: Practice with AI-generated quizzes and get instant feedback
-- 💬 **AI Tutor Chat**: Get help anytime with an AI-powered study assistant
-- 📊 **Progress Tracking**: Monitor your learning journey through insights and analytics
+- 🧠 **Intelligent Quizzes**: Practice with AI-generated quizzes and get instant feedback with detailed explanations.
+- 💬 **AI Tutor Chat**: Get help anytime with an AI-powered study assistant.
+- 📊 **Progress Tracking**: Monitor your learning journey through insights and analytics powered by AI.
 
 ---
 
@@ -33,11 +36,11 @@ Adapta AI combines modern web technologies with AI to create a stress-free learn
 ### Backend
 - **Node.js** with Express
 - **Azure Cosmos DB** for data persistence
-- **Google Gemini AI** (gemini-2.5-flash) for AI features
+- **Google Gemini AI** (gemini-2.5-flash) for study plan generation, quiz creation, chat assistance, and intelligent replanning
+- **Groq AI** (llama-3.3-70b-versatile) for personalized insights generation
 - **bcrypt** for secure password hashing
 - **CORS** enabled for cross-origin requests
-
-- Google Generative AI for study plan generation, quiz creation, chat assistance, and content generation
+- **Retry logic** with exponential backoff for API resilience
 
 ---
 
@@ -48,6 +51,9 @@ study-planner/
 ├── backend/
 │   ├── server.js              # Express server with API endpoints
 │   ├── db.js                  # Cosmos DB client and database operations
+│   ├── planningEngine.js      # AI-powered intelligent replanning engine
+│   ├── geminiUtils.js         # Gemini API utilities with retry logic
+│   ├── groqUtils.js           # Groq API utilities for insights
 │   ├── package.json           # Backend dependencies
 │   ├── .env                   # Environment variables (not tracked)
 │   └── .env.example           # Example environment configuration

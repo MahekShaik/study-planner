@@ -10,9 +10,9 @@ class PlanningEngine {
     /**
      * Re-plans all future/missed tasks using Gemini's intelligence.
      * Considers: Today's date, Exam date, Current mood, Performance status, and Daily hours.
-     * Strict Rules: Runs only once per day per plan to maintain stability.
+     * Strict Rules: Runs only once per day per plan to maintain stability (unless force=true).
      */
-    static async ensureOptimalPlan(userEmail, currentMood = 'okay') {
+    static async ensureOptimalPlan(userEmail, currentMood = 'okay', force = false) {
         try {
             const todayStr = new Date().toISOString().split('T')[0];
             const user = await getUserByEmail(userEmail);
@@ -37,10 +37,14 @@ class PlanningEngine {
 
             // Check if ANY active plan needs replanning today
             const triggeringEntry = activeEntries.find(entry => entry.lastReplanned !== todayStr);
-            const needsReplan = !!triggeringEntry;
+            const needsReplan = !!triggeringEntry || force;
 
             if (needsReplan) {
-                console.log(`[PlanningEngine] Replan triggered for ${userEmail} by active entry: ${triggeringEntry.id} (lastReplanned: ${triggeringEntry.lastReplanned || 'never'})`);
+                if (force) {
+                    console.log(`[PlanningEngine] FORCE replan triggered for ${userEmail} (lastReplanned: ${triggeringEntry?.lastReplanned || 'never'})`);
+                } else {
+                    console.log(`[PlanningEngine] Replan triggered for ${userEmail} by active entry: ${triggeringEntry.id} (lastReplanned: ${triggeringEntry.lastReplanned || 'never'})`);
+                }
             } else {
                 return { redistributed: false };
             }
@@ -159,12 +163,12 @@ class PlanningEngine {
                 const newTasks = parseGeminiJson(text);
 
                 if (Array.isArray(newTasks) && newTasks.length > 0) {
-                    // 3. Persistence: Delete pending tasks for ALL plans we just replanned
+                    // 3. Delete old pending tasks FIRST (before saving new ones)
                     for (const entry of plansContext) {
                         await deletePendingTasks(userEmail, entry.subject);
                     }
 
-                    // 4. Save all new tasks
+                    // 4. Now save all new tasks (they won't be deleted since old ones are already gone)
                     const tasksToSave = newTasks.map(t => ({ ...t, userEmail }));
                     await saveTasks(userEmail, tasksToSave);
 
@@ -175,6 +179,9 @@ class PlanningEngine {
 
                     console.log(`[PlanningEngine] Holistic replan complete. ${newTasks.length} tasks saved.`);
                     return { redistributed: true, count: newTasks.length };
+                } else {
+                    console.warn(`[PlanningEngine] No new tasks generated. Keeping existing tasks.`);
+                    return { redistributed: false, count: 0 };
                 }
             } catch (err) {
                 console.error(`[PlanningEngine] Holistic AI/Parsing Error:`, err.message);

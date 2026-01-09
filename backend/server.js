@@ -201,6 +201,41 @@ app.post('/api/user/mood', async (req, res) => {
   }
 });
 
+// POST /api/debug/trigger-replan - Manually trigger replanning for a user (DEBUG ONLY)
+app.post('/api/debug/trigger-replan', async (req, res) => {
+  try {
+    const { email, mood = 'okay', force = false } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log(`[DEBUG] Manual replanning triggered for ${email} with mood: ${mood}${force ? ' (FORCED)' : ''}`);
+    
+    const result = await PlanningEngine.ensureOptimalPlan(email, mood, force);
+    
+    const tasks = await getTasks(email);
+    
+    res.json({
+      message: 'Replanning triggered successfully',
+      email,
+      mood,
+      force,
+      redistributed: result.redistributed,
+      taskCount: tasks.length,
+      tasksUpdated: tasks.filter(t => t.date >= new Date().toISOString().split('T')[0]).length
+    });
+  } catch (error) {
+    console.error('Debug replan error:', error);
+    res.status(500).json({ message: 'Failed to trigger replanning', error: error.message });
+  }
+});
+
 // GET /api/onboarding - Fetch saved onboarding data
 app.get('/api/onboarding', async (req, res) => {
   const decoded = verifyToken(req);
@@ -289,15 +324,25 @@ console.log("Configured API Key:", genAIKey === 'MISSING_KEY' ? 'MISSING' : (gen
 const genAI = new GoogleGenerativeAI(genAIKey);
 // Direct Gemini integration for syllabus extraction - Make.com integration has been removed.
 
-async function generatePlanFromOnboarding(data, existingPlans = []) {
+async function generatePlanFromOnboarding(data, existingPlans = [], currentMood = 'okay') {
   const existingPlansSummary = existingPlans.length > 0
     ? existingPlans.map(p => `- ${p.onboardingData.level || p.onboardingData.skill} (Exam: ${p.onboardingData.examDate || 'Self-paced'})`).join('\n')
     : 'None';
+
+  // Mood mapping for AI context
+  const moodMap = {
+    'fresh': 'Focus on intense Core Learning and new complex topics. Energy is high.',
+    'calm': 'Steady progress. Balanced mix of learning and moderate practice.',
+    'okay': 'Neutral balance. Follow standard curriculum sequence.',
+    'tired': 'Shift to Reinforcement Revision and light practice. Avoid heavy new theory.',
+    'stressed': 'Focus on Comfort Revision and very easy tasks to build confidence.'
+  };
 
   const systemPrompt = `You are a study planning intelligence for a student.
 A student is ADDING a new goal. You must generate a plan that fits LONGSIDE their current commitments.
 
 TOTAL DAILY CAPACITY: ${data.hoursPerDay} hours/day.
+CURRENT MOOD: ${currentMood.toUpperCase()} (${moodMap[currentMood] || 'Neutral'})
 EXISTING ACTIVE GOALS:
 ${existingPlansSummary}
 
@@ -309,12 +354,20 @@ Exam/Target Date: ${data.examDate || data.skillDuration}
 --------------------------------
 PLANNING LOGIC (STRICT)
 --------------------------------
+1. MOOD DISTRIBUTION:
+   - If 'FRESH': Assign the most complex/intense subtopics (Core Learning, new concepts) to TODAY and the next few days.
+   - If 'CALM': Balanced mix of learning and practice.
+   - If 'OKAY': Standard curriculum sequence.
+   - If 'TIRED': Assign easier, revision-based, or bite-sized subtopics (Reinforcement Revision, Practice) to TODAY. Avoid heavy new theory today.
+   - If 'STRESSED': Focus on Comfort Revision and very easy tasks to build confidence. No complex new topics today.
+
 2. Time Allocation & Priority:
    - YOU MUST SHARE the ${data.hoursPerDay} daily hours across ALL active goals.
    - PRIORITY: Goals with deadlines < 7 days away should receive ~70% of the total daily time.
    - AVAILABILITY: The total load per day should not exceed ${data.hoursPerDay} hours, UNLESS this new goal (or an existing one) is in "Crunch Mode" (deadline < 3 days), in which case availability can be exceeded to ensure readiness.
    - Session durations: 45-90 mins per session.
-4. Output Format: Return EXACTLY a JSON array of task objects.
+
+3. Output Format: Return EXACTLY a JSON array of task objects.
 
 --------------------------------
 OUTPUT FORMAT (JSON ARRAY)
@@ -326,8 +379,8 @@ Each object must have:
 - subtopic: string
 - duration: string (e.g., "45 mins")
 - date: string (YYYY-MM-DD)
-- sessionType: string (e.g. "Core Learning", "Practice", "Active Revision")
-- aiExplanation: string (How this session fits into the student's busy schedule)
+- sessionType: string (e.g. "Core Learning", "Practice", "Active Revision", "Reinforcement Revision")
+- aiExplanation: string (How this session fits into the student's busy schedule and current mood)
 - status: "pending"
 `;
 
@@ -338,6 +391,7 @@ Each object must have:
        Plan starting from today.`;
 
   try {
+    console.log(`[generatePlanFromOnboarding] Mood parameter received: ${currentMood}`);
     let contents = [{ role: "user", parts: [{ text: `${systemPrompt}\n\nINPUT:\n${userPrompt}` }] }];
 
     if (data.syllabusFiles && Array.isArray(data.syllabusFiles) && data.syllabusFiles.length > 0) {
@@ -460,7 +514,14 @@ app.post('/api/study-plan/generate', async (req, res) => {
 
     console.log(`Starting study plan generation for ${decoded.email}...`);
 
-    // 0. Fetch existing plans for context
+    // 0. Fetch user's current mood
+    const user = await getUserByEmail(decoded.email);
+    const currentMood = user ? user.currentMood : 'okay';
+    console.log(`[Plan Generation] User object:`, JSON.stringify({ email: user?.email, currentMood: user?.currentMood, lastMoodDate: user?.lastMoodDate }));
+    console.log(`[Plan Generation] Using mood: ${currentMood || 'okay (default)'}`);
+
+
+    // 1. Fetch existing plans for context
     const existingPlans = await getOnboarding(decoded.email);
     const activeExistingPlans = (existingPlans || []).filter(p => {
       if (p.onboardingData.mode === 'exam' && p.onboardingData.examDate) {
@@ -469,8 +530,8 @@ app.post('/api/study-plan/generate', async (req, res) => {
       return true;
     });
 
-    // 1. Generate tasks using AI (with context of existing plans)
-    const generatedTasks = await generatePlanFromOnboarding(onboardingData, activeExistingPlans);
+    // 2. Generate tasks using AI (with context of existing plans AND current mood)
+    const generatedTasks = await generatePlanFromOnboarding(onboardingData, activeExistingPlans, currentMood);
 
     // 2. Validate tasks are non-empty before persisting
     if (!generatedTasks || generatedTasks.length === 0) {
