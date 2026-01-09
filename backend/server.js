@@ -58,7 +58,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 /* ================================
-   ✅ ROOT HEALTH ROUTE (IMPORTANT)
+   ✅ ROOT HEALTH ROUTE (CRITICAL)
 ================================ */
 app.get('/', (req, res) => {
   res.status(200).json({
@@ -89,14 +89,17 @@ const verifyToken = (req) => {
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password, dailyHours } = req.body;
+
     if (await getUserByEmail(email)) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await createUser(email, name, hashedPassword, dailyHours || 4);
+
     res.json({ message: 'Signup successful' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Signup failed' });
   }
 });
@@ -104,6 +107,7 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+
     const user = await getUserByEmail(email);
     if (!user || !(await bcrypt.compare(password, user.hashedPassword))) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -114,7 +118,8 @@ app.post('/api/auth/login', async (req, res) => {
     ).toString('base64');
 
     res.json({ token });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Login failed' });
   }
 });
@@ -131,9 +136,12 @@ app.get('/api/user/profile', async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000)
+      .toISOString()
+      .split('T')[0];
 
     let currentStreak = user.currentStreak || 0;
+
     if (
       currentStreak > 0 &&
       user.lastStreakDate !== today &&
@@ -153,7 +161,8 @@ app.get('/api/user/profile', async (req, res) => {
       currentMood: user.currentMood || null,
       needsMoodCheck: user.lastMoodDate !== today
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Failed to fetch profile' });
   }
 });
@@ -179,8 +188,15 @@ app.patch('/api/tasks/:id/progress', async (req, res) => {
   const decoded = verifyToken(req);
   if (!decoded) return res.status(401).json({ message: 'Unauthorized' });
 
-  const task = await updateTaskProgress(req.params.id, decoded.email, req.body);
-  task ? res.json(task) : res.status(404).json({ message: 'Task not found' });
+  const task = await updateTaskProgress(
+    req.params.id,
+    decoded.email,
+    req.body
+  );
+
+  task
+    ? res.json(task)
+    : res.status(404).json({ message: 'Task not found' });
 });
 
 /* ================================
@@ -190,26 +206,31 @@ app.get('/api/insights', async (req, res) => {
   const decoded = verifyToken(req);
   if (!decoded) return res.status(401).json({ message: 'Unauthorized' });
 
-  const [user, tasks, quizResults] = await Promise.all([
-    getUserByEmail(decoded.email),
-    getTasks(decoded.email),
-    getQuizResults(decoded.email)
-  ]);
+  try {
+    const [user, tasks, quizResults] = await Promise.all([
+      getUserByEmail(decoded.email),
+      getTasks(decoded.email),
+      getQuizResults(decoded.email)
+    ]);
 
-  if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-  res.json({
-    insights: await generatePersonalizedInsights({
-      name: user.name,
-      currentMood: user.currentMood || 'okay',
-      tasks,
-      quizResults
-    })
-  });
+    res.json({
+      insights: await generatePersonalizedInsights({
+        name: user.name,
+        currentMood: user.currentMood || 'okay',
+        tasks,
+        quizResults
+      })
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to generate insights' });
+  }
 });
 
 /* ================================
-   SERVER START
+   SERVER START (ONLY ONCE ✅)
 ================================ */
 initializeDatabase()
   .then(() => {
